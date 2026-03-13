@@ -9,7 +9,7 @@ export default function Home() {
       color: 'white',
       fontFamily: 'sans-serif'
     }}>
-      <h1>Hola Mundo - A WEB</h1>
+      <h1>Hola Mundo - A WEB!</h1>
     </main>
   );
 }
