@@ -56,7 +56,14 @@ export default function Home() {
                 className="bg-black text-white px-10 py-5 rounded-full font-bold uppercase tracking-tighter hover:scale-105 transition-transform flex items-center gap-3"
               >
                 Lanzar Arcade <Target size={20} />
+                {/* BOTÓN PARA ARCANOID */}
+              <button 
+                onClick={() => setIsArcanoidOpen(true)}
+                className="bg-white text-black px-10 py-5 rounded-full font-bold uppercase tracking-tighter hover:scale-105 transition-transform flex items-center gap-3 mt-4 md:mt-0"
+              >
+                Arcanoid Pro <Play size={20} />
               </button>
+                            </button>
             </div>
             <div className="md:w-1/2 grid grid-cols-2 gap-4 opacity-50">
               <div className="aspect-square bg-black/20 rounded-3xl border border-white/10 animate-pulse" />
