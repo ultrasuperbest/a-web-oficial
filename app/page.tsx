@@ -2,9 +2,11 @@
 import React, { useState } from 'react';
 import { Play, Gamepad2, Newspaper, ArrowRight, Zap, Globe, ShieldCheck, Target } from 'lucide-react';
 import QuantumClicker from '@/components/QuantumClicker'; // Importamos el componente
+import Arcanoid from '@/components/Arcanoid';
 
 export default function Home() {
   const [isGameOpen, setIsGameOpen] = useState(false);
+  const [isArcanoidOpen, setIsArcanoidOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#050505] text-white selection:bg-indigo-500 selection:text-white font-sans">
@@ -66,6 +68,7 @@ export default function Home() {
 
       {/* --- EL JUEGO (Se carga solo cuando se abre) --- */}
       {isGameOpen && <QuantumClicker onClose={() => setIsGameOpen(false)} />}
+      {isArcanoidOpen && <Arcanoid onClose={() => setIsArcanoidOpen(false)} />}
 
       <footer className="py-20 text-center text-gray-600 text-[10px] tracking-[0.3em] uppercase border-t border-white/5">
         © {new Date().getFullYear()} a-web ecosystem
