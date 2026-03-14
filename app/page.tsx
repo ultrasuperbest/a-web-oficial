@@ -54,6 +54,14 @@ export default function Home() {
                 >
                   PONG <Play size={20} />
                 </button>
+
+                <button 
+                  onClick={() => setIsPongOpen(true)} // <-- BOTÓN PONG
+                  className="bg-indigo-800 text-white px-8 py-4 rounded-full font-bold uppercase tracking-tighter hover:scale-105 transition-transform flex items-center gap-3 border border-white/20"
+                >
+                  PONG <Play size={20} />
+                </button>
+
               </div>
             </div>
             
