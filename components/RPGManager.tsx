@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   Coins, 
   Sword, 
   HeartPulse, 
-  Stethoscope, 
   Hammer, 
   Trophy, 
   ArrowRight,
@@ -13,43 +12,55 @@ import {
   ShoppingBag,
   Home,
   X,
-  ChevronRight
+  ChevronRight,
+  PieChart,
+  Building2,
+  Calendar,
+  UserPlus,
+  ArrowLeftCircle,
+  Save,
+  Film,
+  ScrollText,
+  Flame,
+  Wand2,
+  Gem
 } from 'lucide-react';
 
 // --- TYPES & INTERFACES ---
 
-interface Fighter {
+interface Adventurer {
   id: string;
   name: string;
-  type: 'Hero' | 'Monster' | 'Villain';
+  class: 'GUERRERO' | 'MAGO' | 'PÍCARO' | 'PALADÍN';
   level: number;
   hp: number;
   maxHp: number;
+  mana: number;
   attack: number;
   defense: number;
-  speed: number;
-  salary: number;
-  price: number;
+  willpower: number;
+  salary: number; // Oro por semana
+  price: number;  // Coste de reclutamiento
   image: string;
-  injured: boolean;
-  durability: number; // Durability of equipment (0-100)
+  stars: number;
 }
 
-interface Staff {
-  blacksmiths: number;
-  healers: number;
-  marketing: number;
+interface Building {
+  name: string;
+  level: number;
+  effect: string;
+  upgradeCost: number;
 }
 
 interface GameState {
   gold: number;
   reputation: number;
-  day: number;
-  league: string;
-  fighters: Fighter[];
-  market: Fighter[];
-  staff: Staff;
-  coliseumLevel: number;
+  week: number;
+  date: string;
+  guildName: string;
+  adventurers: Adventurer[];
+  market: Adventurer[];
+  buildings: Building[];
   logs: string[];
 }
 
@@ -57,574 +68,339 @@ interface RPGManagerProps {
   onClose: () => void;
 }
 
-// --- CONSTANTS & MOCK DATA ---
+// --- CONSTANTS & GENERATORS ---
 
-const FIGHTER_NAMES = ["Alaric", "Gromm", "Zola", "Xenon", "Valeria", "Gorg", "Balthazar", "Nyx", "Ignis", "Kael"];
-const MONSTER_NAMES = ["Skulker", "Behemoth", "Ravager", "Voidling", "Gnasher", "Troll Lord"];
+const CLASSES: ('GUERRERO' | 'MAGO' | 'PÍCARO' | 'PALADÍN')[] = ['GUERRERO', 'MAGO', 'PÍCARO', 'PALADÍN'];
 
-const generateFighter = (isMarket = true): Fighter => {
-  const isMonster = Math.random() > 0.7;
-  const name = isMonster ? MONSTER_NAMES[Math.floor(Math.random() * MONSTER_NAMES.length)] : FIGHTER_NAMES[Math.floor(Math.random() * FIGHTER_NAMES.length)];
-  const level = Math.floor(Math.random() * 5) + 1;
+const generateAdventurer = (levelRange = [1, 3]): Adventurer => {
+  const names = ["Thalion", "Elowen", "Kaelen", "Morgath", "Bryn", "Sarith", "Valerius", "Xalvador"];
+  const className = CLASSES[Math.floor(Math.random() * CLASSES.length)];
+  const level = Math.floor(Math.random() * (levelRange[1] - levelRange[0] + 1)) + levelRange[0];
   
   return {
     id: Math.random().toString(36).substr(2, 9),
-    name,
-    type: isMonster ? 'Monster' : 'Hero',
+    name: names[Math.floor(Math.random() * names.length)],
+    class: className,
     level,
-    hp: 100 + (level * 20),
-    maxHp: 100 + (level * 20),
-    attack: 15 + (level * 5),
-    defense: 10 + (level * 3),
-    speed: 10 + (level * 2),
-    salary: (level * 50) + (isMonster ? 20 : 10),
-    price: (level * 500),
-    image: isMonster ? '👹' : '⚔️',
-    injured: false,
-    durability: 100
+    hp: 100 + (level * 25),
+    maxHp: 100 + (level * 25),
+    mana: className === 'MAGO' ? 150 : 20,
+    attack: 30 + (level * 12),
+    defense: 20 + (level * 10),
+    willpower: 15 + (level * 5),
+    salary: (level * 25),
+    price: (level * 600),
+    image: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${Math.random()}`,
+    stars: Math.min(5, Math.ceil(level / 1.5))
   };
 };
 
-// --- MAIN COMPONENT ---
-
 export default function RPGManager({ onClose }: RPGManagerProps) {
-  const [view, setView] = useState<'office' | 'market' | 'roster' | 'combat' | 'facilities'>('office');
+  const [activeTab, setActiveTab] = useState('PRINCIPAL');
   const [game, setGame] = useState<GameState>({
-    gold: 2500,
-    reputation: 10,
-    day: 1,
-    league: "División de Bronce",
-    fighters: [generateFighter(false)],
-    market: [generateFighter(), generateFighter(), generateFighter()],
-    staff: { blacksmiths: 1, healers: 1, marketing: 0 },
-    coliseumLevel: 1,
-    logs: ["Bienvenido al Club. Tu primer luchador te espera."]
+    gold: 8500,
+    reputation: 25,
+    week: 1,
+    date: "Luna Nueva, Era de los Dragones",
+    guildName: "ORDEN DEL FÉNIX",
+    adventurers: [generateAdventurer([2, 4]), generateAdventurer([1, 2])],
+    market: [generateAdventurer([3, 5]), generateAdventurer([2, 4]), generateAdventurer([1, 3])],
+    buildings: [
+      { name: "FORJA", level: 1, effect: "+5% Def", upgradeCost: 1500 },
+      { name: "BIBLIOTECA", level: 1, effect: "+10% Mana", upgradeCost: 2000 },
+      { name: "POSADA", level: 1, effect: "+2 Reclutas", upgradeCost: 1200 }
+    ],
+    logs: ["Se ha avistado un Dragón en las tierras del Norte.", "Los impuestos imperiales han subido."]
   });
 
-  // Combat State
-  const [inCombat, setInCombat] = useState(false);
-  const [enemy, setEnemy] = useState<Fighter | null>(null);
-  const [playerCombatant, setPlayerCombatant] = useState<Fighter | null>(null);
-  const [combatLog, setCombatLog] = useState<string[]>([]);
-  const [turn, setTurn] = useState<'player' | 'enemy'>('player');
+  // --- UI COMPONENTS ---
 
-  // --- LOGIC FUNCTIONS ---
+  const SidebarButton = ({ icon: Icon, label, id }: any) => (
+    <button 
+      onClick={() => setActiveTab(id)}
+      className={`w-full flex flex-col items-center py-4 border-b border-black/40 transition-all ${activeTab === id ? 'bg-indigo-900/60 shadow-inner' : 'hover:bg-white/5'}`}
+    >
+      <Icon size={26} className={activeTab === id ? 'text-yellow-400' : 'text-slate-500'} />
+      <span className={`text-[8px] font-black uppercase mt-1 tracking-widest ${activeTab === id ? 'text-white' : 'text-slate-500'}`}>
+        {label}
+      </span>
+    </button>
+  );
 
-  const addLog = (msg: string) => {
-    setGame(prev => ({ ...prev, logs: [msg, ...prev.logs].slice(0, 5) }));
-  };
-
-  const nextDay = () => {
-    // Daily expenses
-    const totalSalaries = game.fighters.reduce((acc, f) => acc + f.salary, 0);
-    const staffCosts = (game.staff.blacksmiths * 30) + (game.staff.healers * 40);
-    const totalCosts = totalSalaries + staffCosts;
-
-    setGame(prev => {
-      // Passive healing and repairs
-      const updatedFighters = prev.fighters.map(f => {
-        let newHp = f.hp;
-        let newDur = f.durability;
-        if (f.injured && prev.staff.healers > 0) newHp = Math.min(f.maxHp, f.hp + (prev.staff.healers * 10));
-        if (newHp === f.maxHp) f.injured = false;
-        if (prev.staff.blacksmiths > 0) newDur = Math.min(100, f.durability + (prev.staff.blacksmiths * 5));
-        return { ...f, hp: newHp, durability: newDur };
-      });
-
-      return {
-        ...prev,
-        day: prev.day + 1,
-        gold: prev.gold - totalCosts,
-        fighters: updatedFighters,
-        market: [generateFighter(), generateFighter(), generateFighter()]
-      };
-    });
-    addLog(`Día ${game.day + 1}: Gastos de mantenimiento: -${totalCosts} oro.`);
-  };
-
-  const hireFighter = (fighter: Fighter) => {
-    if (game.gold < fighter.price) return;
-    setGame(prev => ({
-      ...prev,
-      gold: prev.gold - fighter.price,
-      fighters: [...prev.fighters, fighter],
-      market: prev.market.filter(f => f.id !== fighter.id)
-    }));
-    addLog(`Has contratado a ${fighter.name} por ${fighter.price} oro.`);
-  };
-
-  // --- COMBAT SYSTEM ---
-
-  const startCombat = (myFighter: Fighter) => {
-    if (myFighter.injured || myFighter.hp <= 0) {
-      addLog(`${myFighter.name} está herido y no puede luchar.`);
-      return;
-    }
-    const enemyFighter = generateFighter(false);
-    enemyFighter.name = "Rival: " + enemyFighter.name;
-    setEnemy(enemyFighter);
-    setPlayerCombatant({ ...myFighter });
-    setInCombat(true);
-    setView('combat');
-    setCombatLog(["¡Empieza el combate en el Coliseo!"]);
-  };
-
-  const executeTurn = () => {
-    if (!playerCombatant || !enemy) return;
-
-    // Player attacks
-    const pDamage = Math.max(5, (playerCombatant.attack * (playerCombatant.durability / 100)) - (enemy.defense * 0.5));
-    const newEnemyHp = Math.max(0, enemy.hp - pDamage);
-    
-    setEnemy(prev => prev ? { ...prev, hp: newEnemyHp } : null);
-    setCombatLog(prev => [`${playerCombatant.name} ataca y causa ${pDamage.toFixed(0)} de daño.`, ...prev]);
-
-    if (newEnemyHp <= 0) {
-      endCombat(true);
-      return;
-    }
-
-    // Enemy attacks (Delayed for feel)
-    setTurn('enemy');
-    setTimeout(() => {
-      const eDamage = Math.max(5, enemy.attack - (playerCombatant.defense * 0.5));
-      const newPlayerHp = Math.max(0, playerCombatant.hp - eDamage);
-      
-      setPlayerCombatant(prev => prev ? { ...prev, hp: newPlayerHp } : null);
-      setCombatLog(prev => [`${enemy.name} contraataca y causa ${eDamage.toFixed(0)} de daño.`, ...prev]);
-
-      if (newPlayerHp <= 0) {
-        endCombat(false);
-      } else {
-        setTurn('player');
-      }
-    }, 600);
-  };
-
-  const endCombat = (victory: boolean) => {
-    const reward = victory ? 800 : 100;
-    const repGain = victory ? 5 : -2;
-
-    setGame(prev => {
-      const updatedFighters = prev.fighters.map(f => {
-        if (f.id === playerCombatant?.id) {
-          return { 
-            ...f, 
-            hp: playerCombatant.hp, 
-            injured: playerCombatant.hp < (f.maxHp * 0.2),
-            durability: Math.max(0, f.durability - 15) 
-          };
-        }
-        return f;
-      });
-      return {
-        ...prev,
-        gold: prev.gold + reward,
-        reputation: prev.reputation + repGain,
-        fighters: updatedFighters
-      };
-    });
-
-    setTimeout(() => {
-      setInCombat(false);
-      setView('office');
-      addLog(victory ? `¡Victoria! Ganaste ${reward} oro.` : `Derrota... Solo obtuviste ${reward} oro.`);
-    }, 1500);
-  };
-
-  // --- RENDER HELPERS ---
-
-  const StatBadge = ({ icon: Icon, value, color }: any) => (
-    <div className={`flex items-center gap-1 px-2 py-1 rounded bg-${color}-500/20 text-${color}-400 text-xs font-bold`}>
-      <Icon size={12} />
-      {value}
+  const StatBar = ({ label, value, max, color }: any) => (
+    <div className="flex items-center gap-2 mb-1.5">
+      <span className="text-[9px] font-bold text-slate-700 w-14 uppercase">{label}</span>
+      <div className="flex-1 h-2.5 bg-slate-400/30 rounded-sm overflow-hidden flex shadow-inner border border-black/5">
+        <div 
+          className={`h-full ${color} transition-all duration-700`} 
+          style={{ width: `${(value / max) * 100}%` }}
+        />
+      </div>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 z-[150] bg-[#0a0a0c] text-slate-200 font-sans p-4 md:p-8 overflow-y-auto">
-      {/* HEADER / TOP BAR */}
-      <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between bg-[#151518] border border-white/5 rounded-2xl p-6 mb-6 gap-4 shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-500/20">
-            <Trophy className="text-white" size={24} />
+    <div className="fixed inset-0 z-[150] bg-[#000a1a] text-slate-200 font-sans flex flex-col overflow-hidden select-none">
+      
+      {/* --- TOP BAR (ESTÉTICA PC FÚTBOL 7 ADAPTADA) --- */}
+      <div className="h-14 bg-gradient-to-b from-[#1e3a8a] to-[#172554] border-b-2 border-black flex items-center justify-between px-6 shadow-[0_4px_10px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center gap-5">
+          <div className="w-10 h-10 bg-gradient-to-tr from-yellow-600 to-yellow-300 rounded-sm rotate-45 border-2 border-white flex items-center justify-center shadow-lg">
+            <Flame className="text-white -rotate-45" size={20} />
           </div>
           <div>
-            <h1 className="text-xl font-black uppercase italic tracking-wider text-white leading-none">RPG Manager</h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">{game.league} • Día {game.day}</p>
+            <h1 className="text-lg font-black text-white italic tracking-tighter uppercase leading-none">{game.guildName}</h1>
+            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest mt-0.5">{game.date}</p>
           </div>
         </div>
 
-        <div className="flex gap-6 items-center">
-          <div className="text-right">
-            <p className="text-[10px] uppercase font-bold text-slate-500">Tesorería</p>
-            <p className="text-lg font-mono font-bold text-yellow-500 flex items-center gap-2 justify-end">
-              {game.gold.toLocaleString()} <Coins size={18} />
-            </p>
-          </div>
-          <div className="text-right border-l border-white/10 pl-6 pr-4">
-            <p className="text-[10px] uppercase font-bold text-slate-500">Reputación</p>
-            <p className="text-lg font-mono font-bold text-indigo-400 flex items-center gap-2 justify-end">
-              {game.reputation} <Zap size={18} />
-            </p>
-          </div>
-          <button 
-            onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400"
-          >
-            <X size={24} />
-          </button>
+        <div className="flex items-center gap-10">
+           <div className="flex flex-col items-end">
+             <span className="text-[9px] font-black text-blue-300 uppercase leading-none">Tesoro Real</span>
+             <span className="text-xl font-black text-yellow-400 flex items-center gap-2 italic">{game.gold.toLocaleString()} <Gem size={16} /></span>
+           </div>
+           <button onClick={onClose} className="hover:bg-red-700 p-1.5 border border-white/10 rounded-md transition-all">
+              <X size={20} />
+           </button>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6 pb-12">
-        {/* SIDEBAR NAVIGATION */}
-        <div className="lg:col-span-1 space-y-2">
-          <button 
-            onClick={() => setView('office')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${view === 'office' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'hover:bg-white/5 text-slate-400'}`}
-          >
-            <Home size={20} /> Despacho
-          </button>
-          <button 
-            onClick={() => setView('roster')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${view === 'roster' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'hover:bg-white/5 text-slate-400'}`}
-          >
-            <Users size={20} /> Mi Plantilla ({game.fighters.length})
-          </button>
-          <button 
-            onClick={() => setView('market')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${view === 'market' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'hover:bg-white/5 text-slate-400'}`}
-          >
-            <ShoppingBag size={20} /> Mercado
-          </button>
-          <button 
-            onClick={() => setView('facilities')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${view === 'facilities' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'hover:bg-white/5 text-slate-400'}`}
-          >
-            <Hammer size={20} /> Instalaciones
-          </button>
-
-          <button 
-            onClick={nextDay}
-            className="w-full mt-4 flex items-center justify-center gap-2 bg-white text-black px-6 py-4 rounded-xl font-black uppercase tracking-tighter hover:bg-indigo-400 transition-all active:scale-95"
-          >
-            Siguiente Día <ArrowRight size={18} />
-          </button>
-
-          {/* RECENT LOGS */}
-          <div className="mt-8 p-4 bg-white/5 rounded-xl border border-white/5">
-            <h3 className="text-[10px] uppercase font-black text-slate-500 mb-3 tracking-widest">Actividad Reciente</h3>
-            <div className="space-y-3">
-              {game.logs.map((log, i) => (
-                <p key={i} className="text-[11px] text-slate-400 leading-relaxed border-l-2 border-indigo-500/30 pl-2">
-                  {log}
-                </p>
-              ))}
-            </div>
-          </div>
+      <div className="flex-1 flex overflow-hidden">
+        
+        {/* --- LEFT SIDEBAR (MECÁNICAS DE JUEGO) --- */}
+        <div className="w-18 bg-[#0a0f1e] border-r-2 border-black flex flex-col shadow-2xl">
+          <SidebarButton icon={ArrowLeftCircle} label="RETIRARSE" id="EXIT" />
+          <SidebarButton icon={Save} label="SELLAR" id="SAVE" />
+          <SidebarButton icon={ScrollText} label="MISIONES" id="QUESTS" />
+          <SidebarButton icon={Calendar} label="CRÓNICAS" id="CHRONICLES" />
+          <SidebarButton icon={Zap} label="SIG. SEMANA" id="NEXT" />
         </div>
 
-        {/* MAIN CONTENT AREA */}
-        <div className="lg:col-span-3">
+        {/* --- CENTRAL MANAGEMENT HUB --- */}
+        <div className="flex-1 bg-[#001b44] p-4 overflow-y-auto custom-scrollbar">
           
-          {/* OFFICE VIEW */}
-          {view === 'office' && (
-            <div className="space-y-6">
-              <div className="bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/20 rounded-3xl p-8 relative overflow-hidden">
-                <div className="relative z-10">
-                  <h2 className="text-3xl font-black mb-2 text-white italic uppercase">Estado del Club</h2>
-                  <p className="text-indigo-200/60 max-w-md">Tu coliseo está al nivel {game.coliseumLevel}. Tienes {game.staff.healers} curanderos y {game.staff.blacksmiths} herreros activos.</p>
-                  <div className="mt-6 flex gap-4 flex-wrap">
-                    <div className="bg-black/40 backdrop-blur-md p-4 rounded-2xl border border-white/5 min-w-[120px]">
-                      <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Poder de Ataque</p>
-                      <p className="text-2xl font-black text-white">{game.fighters.reduce((a, b) => a + b.attack, 0)}</p>
-                    </div>
-                    <div className="bg-black/40 backdrop-blur-md p-4 rounded-2xl border border-white/5 min-w-[120px]">
-                      <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Gastos Diarios</p>
-                      <p className="text-2xl font-black text-red-400">-{game.fighters.reduce((a, b) => a + b.salary, 0) + (game.staff.blacksmiths * 30) + (game.staff.healers * 40)}</p>
-                    </div>
-                  </div>
+          {/* TAB: PRINCIPAL (HUB DE GESTIÓN) */}
+          {activeTab === 'PRINCIPAL' && (
+            <div className="max-w-5xl mx-auto h-full flex flex-col">
+              <div className="flex justify-center mb-8">
+                 <div className="bg-gradient-to-b from-slate-900 to-black border-2 border-yellow-700/50 px-10 py-2 rounded-sm shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
+                    <h2 className="text-yellow-500 font-black italic text-xl uppercase tracking-[0.2em]">Cámara de Estrategia</h2>
+                 </div>
+              </div>
+
+              <div className="flex-1 grid grid-cols-2 gap-x-24 gap-y-6 px-12 items-center">
+                {/* COLUMNA GESTIÓN DE PERSONAJE */}
+                <div className="space-y-4">
+                  <MenuLink label="DIARIO DE MISIONES" icon={ScrollText} onClick={() => {}} />
+                  <MenuLink label="RÁNKING DE GREMIOS" icon={Trophy} onClick={() => {}} />
+                  <MenuLink label="CONTRATOS REALES" icon={Calendar} onClick={() => {}} />
+                  <div className="h-6 border-b border-white/5"></div>
+                  <MenuLink label="RECLUTAR" icon={UserPlus} onClick={() => setActiveTab('MARKET')} isSub />
+                  <MenuLink label="MAESTROS" icon={Users} onClick={() => setActiveTab('STAFF')} isSub />
+                  <MenuLink label="INVENTARIO GREMIO" icon={Sword} onClick={() => setActiveTab('ROSTER')} isSub />
                 </div>
-                <div className="absolute top-0 right-0 p-12 opacity-10 rotate-12">
-                  <Trophy size={220} />
+                {/* COLUMNA GESTIÓN DE INFRAESTRUCTURA */}
+                <div className="space-y-4">
+                  <MenuLink label="FORMACIÓN" icon={Shield} onClick={() => setActiveTab('ROSTER')} isRight />
+                  <MenuLink label="HECHIZOS" icon={Wand2} onClick={() => setActiveTab('ROSTER')} isRight />
+                  <MenuLink label="BESTIARIO" icon={ShoppingBag} onClick={() => setActiveTab('MARKET')} isRight />
+                  <div className="h-6 border-b border-white/5"></div>
+                  <MenuLink label="TESORERÍA" icon={Coins} onClick={() => setActiveTab('FINANCE')} isRight isSub />
+                  <MenuLink label="DIPLOMACIA" icon={Hammer} onClick={() => {}} isRight isSub />
+                  <MenuLink label="CIUDADELA" icon={Building2} onClick={() => setActiveTab('STADIUM')} isRight isSub />
                 </div>
               </div>
 
-              <h3 className="text-lg font-bold text-white flex items-center gap-2 mt-8">
-                <Zap size={20} className="text-yellow-500" /> Luchadores Listos
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {game.fighters.map(f => (
-                  <div key={f.id} className="bg-[#151518] p-5 rounded-2xl border border-white/5 flex items-center justify-between hover:border-indigo-500/40 transition-all group">
-                    <div className="flex items-center gap-4">
-                      <span className="text-4xl group-hover:scale-110 transition-transform">{f.image}</span>
-                      <div>
-                        <h4 className="font-bold text-white">{f.name}</h4>
-                        <div className="flex gap-2 mt-1">
-                          <StatBadge icon={Sword} value={f.attack} color="red" />
-                          <StatBadge icon={Shield} value={f.defense} color="blue" />
-                        </div>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => startCombat(f)}
-                      disabled={f.injured}
-                      className={`p-3 rounded-xl transition-all ${f.injured ? 'bg-white/5 text-slate-600' : 'bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600 hover:text-white'}`}
-                    >
-                      <ArrowRight size={20} />
-                    </button>
-                  </div>
-                ))}
+              {/* REPRESENTACIÓN DE EMPLEADOS / MAESTROS */}
+              <div className="mt-auto h-20 bg-black/50 border-t border-yellow-700/30 flex items-center px-6 gap-3">
+                 {game.adventurers.slice(0, 8).map((adv, i) => (
+                   <div key={i} className="flex-1 h-16 bg-indigo-950/30 border border-white/5 flex flex-col items-center justify-center grayscale hover:grayscale-0 cursor-help transition-all group relative">
+                      <img src={adv.image} className="w-10 h-10" />
+                      <div className="absolute -top-1 right-0 text-[8px] font-black text-yellow-500">{adv.level}</div>
+                      <div className="w-full bg-yellow-600 h-0.5 mt-auto opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                   </div>
+                 ))}
+                 {Array(8 - game.adventurers.length).fill(null).map((_, i) => (
+                   <div key={i} className="flex-1 h-16 bg-black/20 border border-white/5 opacity-20"></div>
+                 ))}
               </div>
             </div>
           )}
 
-          {/* ROSTER VIEW */}
-          {view === 'roster' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {game.fighters.map(f => (
-                <div key={f.id} className="bg-[#151518] border border-white/5 rounded-2xl p-6 relative overflow-hidden group">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-4">
-                      <div className="text-5xl bg-white/5 p-3 rounded-2xl group-hover:bg-indigo-500/10 transition-colors">{f.image}</div>
-                      <div>
-                        <h4 className="text-xl font-bold text-white">{f.name}</h4>
-                        <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Nivel {f.level} {f.type}</p>
-                      </div>
-                    </div>
-                    {f.injured && (
-                      <div className="bg-red-500 text-white text-[10px] font-black px-2 py-1 rounded uppercase animate-pulse">Lesionado</div>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between text-[10px] font-bold uppercase mb-1">
-                        <span className="text-slate-500">Salud</span>
-                        <span className={f.hp < f.maxHp * 0.3 ? 'text-red-400' : 'text-emerald-400'}>{f.hp} / {f.maxHp}</span>
-                      </div>
-                      <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(f.hp / f.maxHp) * 100}%` }}></div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between text-[10px] font-bold uppercase mb-1">
-                        <span className="text-slate-500">Estado del Equipo (Forja)</span>
-                        <span className="text-indigo-400">{f.durability}%</span>
-                      </div>
-                      <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${f.durability}%` }}></div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 pt-2">
-                      <div className="bg-black/20 p-2 rounded-lg text-center border border-white/5">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold">Atq</p>
-                        <p className="font-bold text-red-400">{f.attack}</p>
-                      </div>
-                      <div className="bg-black/20 p-2 rounded-lg text-center border border-white/5">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold">Def</p>
-                        <p className="font-bold text-blue-400">{f.defense}</p>
-                      </div>
-                      <div className="bg-black/20 p-2 rounded-lg text-center border border-white/5">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold">Vel</p>
-                        <p className="font-bold text-yellow-400">{f.speed}</p>
-                      </div>
-                    </div>
-
-                    <button 
-                       onClick={() => startCombat(f)}
-                       disabled={f.injured}
-                       className="w-full mt-2 bg-white/5 hover:bg-white/10 text-white py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all"
-                    >
-                      Combatir ahora
-                    </button>
-                  </div>
-                </div>
-              ))}
+          {/* TAB: ROSTER (MI GREMIO) */}
+          {activeTab === 'ROSTER' && (
+            <div className="max-w-4xl mx-auto bg-[#c5c9d6] text-slate-900 rounded-sm shadow-[0_20px_50px_rgba(0,0,0,0.9)] overflow-hidden border-2 border-black">
+               <div className="bg-[#172554] p-3 flex justify-between items-center text-white border-b-2 border-black">
+                 <h3 className="font-black italic px-4 uppercase tracking-tighter">Registros del Gremio</h3>
+                 <button onClick={() => setActiveTab('PRINCIPAL')} className="bg-[#1e3a8a] hover:bg-blue-700 px-6 py-1 text-[10px] font-black uppercase border border-black/40">Cerrar</button>
+               </div>
+               <table className="w-full text-left border-collapse">
+                 <thead className="bg-[#a3a9bb] text-[9px] font-black uppercase text-slate-600">
+                   <tr>
+                     <th className="p-3 border-b border-slate-400">Aventurero</th>
+                     <th className="p-3 border-b border-slate-400">Clase</th>
+                     <th className="p-3 border-b border-slate-400 text-center">Rango</th>
+                     <th className="p-3 border-b border-slate-400 text-center">Atq</th>
+                     <th className="p-3 border-b border-slate-400 text-center">Def</th>
+                     <th className="p-3 border-b border-slate-400">Salario</th>
+                     <th className="p-3 border-b border-slate-400"></th>
+                   </tr>
+                 </thead>
+                 <tbody className="text-[11px] font-bold">
+                   {game.adventurers.map(f => (
+                     <tr key={f.id} className="hover:bg-blue-200/50 border-b border-slate-300 transition-colors">
+                       <td className="p-3">{f.name}</td>
+                       <td className="p-3"><span className="bg-slate-800 text-white px-2 py-0.5 rounded-full text-[8px]">{f.class}</span></td>
+                       <td className="p-3 text-center text-yellow-700">{"★".repeat(f.stars)}</td>
+                       <td className="p-3 text-center text-red-700">{f.attack}</td>
+                       <td className="p-3 text-center text-blue-700">{f.defense}</td>
+                       <td className="p-3 text-slate-500">{f.salary} G</td>
+                       <td className="p-3">
+                         <button className="bg-[#1e3a8a] text-white px-3 py-1 rounded-sm text-[8px] font-black uppercase hover:bg-black transition-all">Perfil</button>
+                       </td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
             </div>
           )}
 
-          {/* MARKET VIEW */}
-          {view === 'market' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* TAB: MARKET (RECLUTAR) */}
+          {activeTab === 'MARKET' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {game.market.map(f => (
-                <div key={f.id} className="bg-[#151518] border border-white/5 rounded-2xl p-6 hover:border-white/20 transition-all">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="flex items-center gap-4">
-                      <div className="text-5xl">{f.image}</div>
-                      <div>
-                        <h4 className="text-xl font-bold text-white">{f.name}</h4>
-                        <div className="flex gap-2">
-                           <StatBadge icon={Zap} value={`LVL ${f.level}`} color="indigo" />
-                           <span className="text-[10px] text-slate-500 font-bold self-center uppercase">{f.type}</span>
-                        </div>
-                      </div>
+                <div key={f.id} className="bg-[#e2e8f0] text-slate-900 border-x-4 border-b-4 border-t border-slate-400 rounded-sm p-4 shadow-2xl relative">
+                  <div className="absolute top-2 right-2 bg-slate-800 text-white text-[8px] font-black px-2 py-1 rounded">NV {f.level}</div>
+                  <div className="flex gap-4 mb-4">
+                    <div className="w-16 h-16 bg-white border-2 border-[#1e3a8a] flex items-center justify-center p-1">
+                       <img src={f.image} alt={f.name} />
                     </div>
-                    <div className="text-right">
-                      <p className="text-xl font-black text-yellow-500">{f.price}</p>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase">Oro</p>
+                    <div>
+                       <h4 className="font-black text-sm uppercase italic text-[#1e3a8a]">{f.name}</h4>
+                       <p className="text-[10px] font-bold text-slate-500 uppercase">{f.class}</p>
+                       <div className="flex gap-1 mt-1">
+                         {Array(5).fill(0).map((_, i) => (
+                           <div key={i} className={`w-2 h-2 rounded-full ${i < f.stars ? 'bg-yellow-500' : 'bg-slate-300'}`}></div>
+                         ))}
+                       </div>
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-3 gap-4 mb-6">
-                    <div className="text-center border-r border-white/5">
-                      <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Ataque</p>
-                      <p className="text-lg font-bold text-white">{f.attack}</p>
-                    </div>
-                    <div className="text-center border-r border-white/5">
-                      <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Defensa</p>
-                      <p className="text-lg font-bold text-white">{f.defense}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Sueldo</p>
-                      <p className="text-lg font-bold text-red-400">{f.salary}</p>
-                    </div>
+                  <div className="bg-white/50 p-3 rounded-sm border border-slate-300">
+                    <StatBar label="Ataque" value={f.attack} max={100} color="bg-red-600" />
+                    <StatBar label="Defensa" value={f.defense} max={100} color="bg-blue-600" />
+                    <StatBar label="Poder" value={f.willpower} max={100} color="bg-purple-600" />
                   </div>
 
-                  <button 
-                    onClick={() => hireFighter(f)}
-                    disabled={game.gold < f.price}
-                    className={`w-full py-4 rounded-xl font-black uppercase tracking-widest transition-all ${game.gold >= f.price ? 'bg-white text-black hover:bg-indigo-400 hover:scale-[1.02]' : 'bg-white/5 text-slate-600 cursor-not-allowed'}`}
-                  >
-                    {game.gold >= f.price ? 'Firmar Contrato' : 'Fondos Insuficientes'}
-                  </button>
+                  <div className="mt-4 flex items-center justify-between">
+                    <div>
+                       <p className="text-[10px] font-black text-slate-400 uppercase leading-none">Coste Firma</p>
+                       <p className="text-lg font-black text-[#1e3a8a]">{f.price} <span className="text-[10px]">ORO</span></p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        if (game.gold < f.price) return;
+                        setGame(prev => ({
+                          ...prev,
+                          gold: prev.gold - f.price,
+                          adventurers: [...prev.adventurers, f],
+                          market: prev.market.filter(m => m.id !== f.id)
+                        }));
+                      }}
+                      className={`px-6 py-2 font-black uppercase italic border-2 border-black transition-all text-xs ${game.gold >= f.price ? 'bg-[#1e3a8a] text-white hover:bg-black hover:scale-105' : 'bg-slate-400 text-slate-600 cursor-not-allowed'}`}
+                    >
+                      RECLUTAR
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* COMBAT VIEW */}
-          {view === 'combat' && playerCombatant && enemy && (
-            <div className="bg-[#151518] rounded-3xl border border-white/5 overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
-              <div className="p-8 h-80 relative flex items-center justify-around bg-gradient-to-b from-indigo-950/20 to-transparent">
-                
-                {/* PLAYER SIDE */}
-                <div className="text-center relative">
-                  <div className={`text-8xl mb-4 transition-all duration-300 ${turn === 'player' ? 'scale-125 drop-shadow-[0_0_20px_rgba(79,70,229,0.5)] translate-x-4' : 'opacity-80'}`}>
-                    {playerCombatant.image}
+          {/* TAB: STADIUM (CIUDADELA) */}
+          {activeTab === 'STADIUM' && (
+            <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+              {game.buildings.map(b => (
+                <div key={b.name} className="bg-gradient-to-br from-slate-200 to-slate-400 border-b-4 border-slate-600 p-6 rounded-sm shadow-xl flex flex-col">
+                  <div className="flex justify-between items-start mb-4">
+                    <h4 className="text-xl font-black text-slate-900 italic uppercase">{b.name}</h4>
+                    <span className="bg-slate-900 text-white px-3 py-1 text-xs font-black">NIVEL {b.level}</span>
                   </div>
-                  <h4 className="text-xl font-black text-white italic">{playerCombatant.name}</h4>
-                  <div className="w-48 h-3 bg-white/5 rounded-full mt-2 overflow-hidden border border-white/10">
-                    <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(playerCombatant.hp / playerCombatant.maxHp) * 100}%` }}></div>
-                  </div>
-                  <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-widest">Mi Luchador</p>
-                </div>
-
-                <div className="text-4xl font-black text-white italic opacity-20 animate-pulse">VS</div>
-
-                {/* ENEMY SIDE */}
-                <div className="text-center relative">
-                  <div className={`text-8xl mb-4 transition-all duration-300 ${turn === 'enemy' ? 'scale-125 drop-shadow-[0_0_20px_rgba(239,68,68,0.5)] -translate-x-4' : 'opacity-80'}`}>
-                    {enemy.image}
-                  </div>
-                  <h4 className="text-xl font-black text-white italic">{enemy.name}</h4>
-                  <div className="w-48 h-3 bg-white/5 rounded-full mt-2 overflow-hidden border border-white/10">
-                    <div className="h-full bg-red-500 transition-all duration-500" style={{ width: `${(enemy.hp / enemy.maxHp) * 100}%` }}></div>
-                  </div>
-                  <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-widest">Oponente</p>
-                </div>
-              </div>
-
-              {/* ACTION LOG & CONTROLS */}
-              <div className="grid grid-cols-1 md:grid-cols-2 border-t border-white/5 h-64 bg-black/40">
-                <div className="p-6 border-r border-white/5 overflow-y-auto font-mono text-xs space-y-2">
-                  {combatLog.map((log, i) => (
-                    <div key={i} className={`${i === 0 ? 'text-white font-bold' : 'text-slate-500'} flex gap-2`}>
-                      <span className="opacity-30">[{combatLog.length - i}]</span> {log}
+                  <p className="text-xs font-bold text-slate-600 uppercase mb-4 h-10">{b.effect}</p>
+                  <div className="mt-auto pt-4 border-t border-slate-500/30 flex justify-between items-end">
+                    <div>
+                      <p className="text-[10px] font-black text-slate-500 uppercase">Mejora</p>
+                      <p className="text-lg font-black text-[#1e3a8a]">{b.upgradeCost} G</p>
                     </div>
-                  ))}
+                    <button className="bg-slate-900 text-white px-6 py-2 text-[10px] font-black uppercase hover:bg-blue-900 transition-colors">AMPLIAR</button>
+                  </div>
                 </div>
-                <div className="p-8 flex flex-col justify-center gap-4 bg-indigo-900/10">
-                  <button 
-                    onClick={executeTurn}
-                    disabled={playerCombatant.hp <= 0 || enemy.hp <= 0 || turn === 'enemy'}
-                    className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 ${turn === 'player' ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20' : 'bg-white/5 text-slate-500 cursor-wait'}`}
-                  >
-                    <Sword size={24} /> {turn === 'player' ? 'Ejecutar Acción' : 'Esperando Rival...'}
-                  </button>
-                  <p className="text-center text-[10px] uppercase font-bold text-slate-500">
-                    La durabilidad del equipo afecta al daño causado
+              ))}
+            </div>
+          )}
+
+        </div>
+
+        {/* --- RIGHT INFO PANEL (SISTEMA DE LORE Y NOTICIAS) --- */}
+        <div className="w-64 bg-[#0a0f1e] border-l-2 border-black p-5 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
+          <div className="bg-black/60 border border-blue-900 p-4 rounded-sm mb-6 shadow-inner">
+             <h4 className="text-yellow-500 text-[10px] font-black uppercase mb-3 tracking-widest flex items-center gap-2">
+               <Coins size={12} /> Estado Financiero
+             </h4>
+             <div className="flex justify-between text-[11px] font-mono mb-2">
+                <span className="text-slate-400">INGRESOS:</span>
+                <span className="text-emerald-500 font-bold">+2.400 G</span>
+             </div>
+             <div className="flex justify-between text-[11px] font-mono">
+                <span className="text-slate-400">SALARIOS:</span>
+                <span className="text-red-500 font-bold">-{game.adventurers.reduce((a,b)=>a+b.salary, 0)} G</span>
+             </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-4">
+             <h4 className="text-white text-[10px] font-black uppercase border-b border-white/10 pb-2 tracking-[0.2em]">Rumores de Taberna</h4>
+             {game.logs.map((log, i) => (
+               <div key={i} className="flex gap-3">
+                  <div className="w-1 h-auto bg-blue-700 shrink-0"></div>
+                  <p className="text-[10px] text-slate-400 leading-relaxed italic">
+                    {log}
                   </p>
-                </div>
-              </div>
-            </div>
-          )}
+               </div>
+             ))}
+          </div>
 
-          {/* FACILITIES VIEW */}
-          {view === 'facilities' && (
-            <div className="grid grid-cols-1 gap-4">
-              <div className="bg-[#151518] p-8 rounded-3xl border border-white/5 flex flex-wrap items-center justify-between gap-6">
-                <div className="flex items-center gap-6">
-                  <div className="p-5 bg-indigo-500/10 rounded-2xl text-indigo-400 shadow-inner"><Hammer size={32} /></div>
-                  <div>
-                    <h4 className="text-xl font-black text-white uppercase italic">Cuerpo de Herreros</h4>
-                    <p className="text-sm text-slate-500 max-w-sm">Los herreros mantienen el equipo. Cada herrero repara un 5% de durabilidad de toda la plantilla cada noche.</p>
-                  </div>
+          <div className="mt-6 pt-6 border-t border-white/5 space-y-3">
+             <div className="bg-red-950/40 border border-red-900/50 p-3 rounded-sm">
+                <p className="text-[9px] font-black text-red-400 uppercase mb-1">Próxima Gran Incursión</p>
+                <p className="text-xs font-bold text-white italic">Cataratas del Olvido</p>
+                <div className="flex gap-1 mt-2">
+                  <div className="flex-1 h-1 bg-red-900/50"></div>
+                  <div className="flex-1 h-1 bg-red-900/50"></div>
+                  <div className="flex-1 h-1 bg-red-950"></div>
                 </div>
-                <div className="flex items-center gap-6 bg-black/40 p-4 rounded-2xl border border-white/5">
-                  <div className="text-center">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">Personal</p>
-                    <p className="text-2xl font-black text-white">{game.staff.blacksmiths}</p>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      if (game.gold < 500) return;
-                      setGame(g => ({...g, gold: g.gold - 500, staff: {...g.staff, blacksmiths: g.staff.blacksmiths + 1}}));
-                      addLog("Has contratado a un nuevo Herrero.");
-                    }}
-                    disabled={game.gold < 500}
-                    className="bg-white text-black px-6 py-2 rounded-xl text-xs font-black uppercase hover:bg-indigo-400 transition-all disabled:opacity-20"
-                  >
-                    + (500 Oro)
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-[#151518] p-8 rounded-3xl border border-white/5 flex flex-wrap items-center justify-between gap-6">
-                <div className="flex items-center gap-6">
-                  <div className="p-5 bg-emerald-500/10 rounded-2xl text-emerald-400 shadow-inner"><HeartPulse size={32} /></div>
-                  <div>
-                    <h4 className="text-xl font-black text-white uppercase italic">Clínica Médica</h4>
-                    <p className="text-sm text-slate-500 max-w-sm">Los curanderos sanan a los heridos. Cada médico recupera 10 HP por noche a los luchadores lesionados.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-6 bg-black/40 p-4 rounded-2xl border border-white/5">
-                  <div className="text-center">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">Personal</p>
-                    <p className="text-2xl font-black text-white">{game.staff.healers}</p>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      if (game.gold < 600) return;
-                      setGame(g => ({...g, gold: g.gold - 600, staff: {...g.staff, healers: g.staff.healers + 1}}));
-                      addLog("Has contratado a un nuevo Médico.");
-                    }}
-                    disabled={game.gold < 600}
-                    className="bg-white text-black px-6 py-2 rounded-xl text-xs font-black uppercase hover:bg-indigo-400 transition-all disabled:opacity-20"
-                  >
-                    + (600 Oro)
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-[#151518] p-8 rounded-3xl border border-white/5 flex flex-wrap items-center justify-between gap-6 opacity-50 cursor-not-allowed">
-                <div className="flex items-center gap-6">
-                  <div className="p-5 bg-yellow-500/10 rounded-2xl text-yellow-400 shadow-inner"><ShoppingBag size={32} /></div>
-                  <div>
-                    <h4 className="text-xl font-black text-white uppercase italic">Expansión del Coliseo</h4>
-                    <p className="text-sm text-slate-500 max-w-sm">Aumenta el aforo para ganar más oro en cada combate. Próximamente en futuras versiones.</p>
-                  </div>
-                </div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Nivel Máx Alcanzado</p>
-              </div>
-            </div>
-          )}
-
+             </div>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// --- HELPER COMPONENTS ---
+
+function MenuLink({ label, icon: Icon, onClick, isRight = false, isSub = false }: any) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`flex items-center gap-4 group transition-all w-full ${isRight ? 'flex-row-reverse text-right' : 'text-left'}`}
+    >
+      <div className={`p-2 bg-gradient-to-br from-indigo-700 to-blue-900 border-2 border-white/10 shadow-[4px_4px_0px_rgba(0,0,0,0.5)] group-hover:scale-110 group-hover:border-yellow-500 transition-all ${isSub ? 'scale-90 opacity-70' : ''}`}>
+        <Icon size={isSub ? 16 : 22} className="text-white" />
+      </div>
+      <span className={`font-black italic tracking-tighter uppercase transition-colors group-hover:text-yellow-400 ${isSub ? 'text-[11px] text-blue-200' : 'text-lg text-white'}`}>
+        {label}
+      </span>
+      {isSub && <div className="flex-1 h-[1px] bg-white/5 mx-2"></div>}
+    </button>
   );
 }
