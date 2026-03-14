@@ -1,4 +1,4 @@
-// app/page.tsx (fragmento actualizado)
+// app/page.tsx
 'use client';
 
 import React, { useState } from 'react';
@@ -6,23 +6,51 @@ import { Play, Gamepad2, Newspaper, ArrowRight, Zap, Globe, ShieldCheck, Target 
 import QuantumClicker from '@/components/QuantumClicker';
 import Arcanoid from '@/components/Arcanoid';
 import RPGManager from '@/components/RPGManager';
-import Pong from '@/components/Pong'; // <-- IMPORTAR PONG
+import Pong from '@/components/Pong';
+import FF1NES from '@/components/FF1NES';
 
 export default function Home() {
   const [isGameOpen, setIsGameOpen] = useState(false);
   const [isArcanoidOpen, setIsArcanoidOpen] = useState(false);
   const [isRPGOpen, setIsRPGOpen] = useState(false);
-  const [isPongOpen, setIsPongOpen] = useState(false); // <-- NUEVO ESTADO
+  const [isPongOpen, setIsPongOpen] = useState(false);
+  const [isFF1Open, setIsFF1Open] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#050505] text-white selection:bg-indigo-500 selection:text-white font-sans">
       
-      {/* ... NAVBAR igual ... */}
+      {/* --- NAVBAR --- */}
+      <nav className="fixed top-0 w-full z-[100] border-b border-white/5 bg-[#050505]/80 backdrop-blur-xl h-20 flex items-center">
+        <div className="max-w-7xl mx-auto px-6 w-full flex justify-between items-center">
+          <div className="flex items-center gap-2 group cursor-pointer">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center group-hover:rotate-12 transition-transform">
+              <Zap size={18} fill="white" />
+            </div>
+            <span className="text-2xl font-black tracking-tighter uppercase italic text-white">a-web</span>
+          </div>
+          <div className="hidden md:flex gap-10 items-center">
+            {['Videos', 'Juegos', 'Blog'].map((item) => (
+              <a key={item} href={`#${item.toLowerCase()}`} className="text-xs font-bold tracking-[0.2em] uppercase text-gray-400 hover:text-indigo-400 transition-colors">{item}</a>
+            ))}
+          </div>
+        </div>
+      </nav>
 
       <main>
-        {/* ... HERO igual ... */}
+        {/* --- HERO --- */}
+        <section className="relative pt-40 pb-24 px-6 text-center overflow-hidden">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-indigo-600/10 blur-[120px] rounded-full -z-10" />
+          <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-8 leading-none">A-WEB<br/><span className="text-indigo-500">EXPERIENCE</span></h1>
+          <p className="text-gray-400 max-w-2xl mx-auto text-lg mb-12">Entretenimiento digital de alto rendimiento. Videos, juegos y contenido exclusivo.</p>
+          <div className="flex justify-center gap-6">
+            <div className="flex items-center gap-6 px-6 py-4 bg-white/5 rounded-2xl border border-white/10 italic text-gray-400 text-sm">
+              <span className="flex items-center gap-2"><Globe size={16} /> Global</span>
+              <span className="flex items-center gap-2"><ShieldCheck size={16} /> Secure</span>
+            </div>
+          </div>
+        </section>
 
-        {/* SECCIÓN JUEGOS - ACTUALIZADA CON PONG */}
+        {/* --- SECCIÓN JUEGOS --- */}
         <section id="juegos" className="bg-indigo-600 py-24">
           <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center gap-16">
             <div className="md:w-1/2">
@@ -49,19 +77,18 @@ export default function Home() {
                 </button>
 
                 <button 
-                  onClick={() => setIsPongOpen(true)} // <-- BOTÓN PONG
+                  onClick={() => setIsPongOpen(true)}
                   className="bg-indigo-800 text-white px-8 py-4 rounded-full font-bold uppercase tracking-tighter hover:scale-105 transition-transform flex items-center gap-3 border border-white/20"
                 >
                   PONG <Play size={20} />
                 </button>
 
                 <button 
-                  onClick={() => setIsPongOpen(true)} // <-- BOTÓN PONG
-                  className="bg-indigo-800 text-white px-8 py-4 rounded-full font-bold uppercase tracking-tighter hover:scale-105 transition-transform flex items-center gap-3 border border-white/20"
+                  onClick={() => setIsFF1Open(true)}
+                  className="bg-purple-800 text-white px-8 py-4 rounded-full font-bold uppercase tracking-tighter hover:scale-105 transition-transform flex items-center gap-3 border border-white/20"
                 >
-                  PONG <Play size={20} />
+                  FF1 NES <Gamepad2 size={20} />
                 </button>
-
               </div>
             </div>
             
@@ -77,9 +104,12 @@ export default function Home() {
       {isGameOpen && <QuantumClicker onClose={() => setIsGameOpen(false)} />}
       {isArcanoidOpen && <Arcanoid onClose={() => setIsArcanoidOpen(false)} />}
       {isRPGOpen && <RPGManager onClose={() => setIsRPGOpen(false)} />}
-      {isPongOpen && <Pong onClose={() => setIsPongOpen(false)} />} {/* <-- PONG */}
+      {isPongOpen && <Pong onClose={() => setIsPongOpen(false)} />}
+      {isFF1Open && <FF1NES onClose={() => setIsFF1Open(false)} />}
 
-      {/* ... FOOTER igual ... */}
+      <footer className="py-20 text-center text-gray-600 text-[10px] tracking-[0.3em] uppercase border-t border-white/5">
+        © {new Date().getFullYear()} a-web ecosystem
+      </footer>
     </div>
   );
 }
