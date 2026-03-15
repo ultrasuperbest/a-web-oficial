@@ -2,12 +2,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Play, Gamepad2, Newspaper, ArrowRight, Zap, Globe, ShieldCheck, Target } from 'lucide-react';
+import { Play, Gamepad2, Newspaper, ArrowRight, Zap, Globe, ShieldCheck, Target, Mouse } from 'lucide-react';
 import QuantumClicker from '@/components/QuantumClicker';
 import Arcanoid from '@/components/Arcanoid';
 import RPGManager from '@/components/RPGManager';
 import Pong from '@/components/Pong';
 import FF1NES from '@/components/FF1NES';
+import MazeSimulator from '@/components/MazeSimulator';
 
 export default function Home() {
   const [isGameOpen, setIsGameOpen] = useState(false);
@@ -15,6 +16,7 @@ export default function Home() {
   const [isRPGOpen, setIsRPGOpen] = useState(false);
   const [isPongOpen, setIsPongOpen] = useState(false);
   const [isFF1Open, setIsFF1Open] = useState(false);
+  const [isMazeOpen, setIsMazeOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#050505] text-white selection:bg-indigo-500 selection:text-white font-sans">
@@ -89,6 +91,14 @@ export default function Home() {
                 >
                   FF1 NES <Gamepad2 size={20} />
                 </button>
+
+                {/* NUEVO JUEGO: Ratón y Queso */}
+                <button 
+                  onClick={() => setIsMazeOpen(true)}
+                  className="bg-amber-700 text-white px-8 py-4 rounded-full font-bold uppercase tracking-tighter hover:scale-105 transition-transform flex items-center gap-3 border border-white/20"
+                >
+                  Ratón y Queso <Mouse size={20} />
+                </button>
               </div>
             </div>
             
@@ -106,6 +116,7 @@ export default function Home() {
       {isRPGOpen && <RPGManager onClose={() => setIsRPGOpen(false)} />}
       {isPongOpen && <Pong onClose={() => setIsPongOpen(false)} />}
       {isFF1Open && <FF1NES onClose={() => setIsFF1Open(false)} />}
+      {isMazeOpen && <MazeSimulator onClose={() => setIsMazeOpen(false)} />}
 
       <footer className="py-20 text-center text-gray-600 text-[10px] tracking-[0.3em] uppercase border-t border-white/5">
         © {new Date().getFullYear()} a-web ecosystem
