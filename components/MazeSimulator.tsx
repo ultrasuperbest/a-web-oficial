@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, ChevronDown } from 'lucide-react';
+import { getNextMouseMove, onInit, onCheeseFound, onRetry, BEHAVIOR_NAME } from './MouseBehavior';
 
 // Constantes
 const MIN_SIZE = 10;
@@ -10,10 +11,10 @@ const DEFAULT_SIZE = 30;
 const INITIAL_SPEED = 150;
 
 // Tipos de celdas
-type CellType = 'empty' | 'wall' | 'mouse' | 'cheese';
+export type CellType = 'empty' | 'wall' | 'mouse' | 'cheese';
 
 // Posición
-interface Position {
+export interface Position {
   x: number;
   y: number;
 }
@@ -139,6 +140,10 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
         setTime(0);
         setFoundCheese(false);
         setShowSizeSelector(false);
+        
+        // Llamar al onInit del comportamiento
+        onInit(newGrid, { x: mouseX, y: mouseY }, { x: cheeseX, y: cheeseY }, size);
+        
         return true;
       }
       
@@ -170,6 +175,9 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
     setFoundCheese(false);
     setShowSizeSelector(false);
     
+    // Llamar al onInit del comportamiento
+    onInit(simpleGrid, { x: 1, y: 1 }, { x: size - 2, y: size - 2 }, size);
+    
     return true;
   }, []);
   
@@ -197,65 +205,73 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
     };
   }, [isRunning, foundCheese]);
   
-  // Movimiento aleatorio del ratón
-  const moveMouseRandomly = useCallback(() => {
+  // Movimiento del ratón usando el comportamiento externo
+  const moveMouse = useCallback(() => {
     if (!isRunning || foundCheese) return;
     
-    // Obtener movimientos posibles
-    const possibleMoves: Position[] = [];
+    // Obtener el siguiente movimiento desde el comportamiento externo
+    const nextMove = getNextMouseMove(
+      grid,
+      mousePos,
+      cheesePos,
+      moves,
+      time,
+      gridSize
+    );
     
-    for (const dir of DIRECTIONS) {
-      const newX = mousePos.x + dir.x;
-      const newY = mousePos.y + dir.y;
+    // Si no hay movimiento posible, no hacer nada
+    if (!nextMove) return;
+    
+    // Verificar que el movimiento sea válido (por seguridad)
+    const isValidMove = (() => {
+      if (nextMove.x < 0 || nextMove.x >= gridSize || nextMove.y < 0 || nextMove.y >= gridSize) {
+        return false;
+      }
+      if (grid[nextMove.y][nextMove.x] === 'wall') {
+        return false;
+      }
+      return true;
+    })();
+    
+    if (!isValidMove) return;
+    
+    // Actualizar grid
+    setGrid(prevGrid => {
+      const newGrid = [...prevGrid];
       
-      // Verificar límites y si la celda está vacía
-      if (newX >= 0 && newX < gridSize && newY >= 0 && newY < gridSize) {
-        if (grid[newY][newX] === 'empty' || 
-            (newX === cheesePos.x && newY === cheesePos.y)) {
-          possibleMoves.push({ x: newX, y: newY });
-        }
+      // Limpiar posición anterior del ratón
+      newGrid[mousePos.y][mousePos.x] = 'empty';
+      
+      // Verificar si encontró el queso
+      if (nextMove.x === cheesePos.x && nextMove.y === cheesePos.y) {
+        setFoundCheese(true);
+        setIsRunning(false);
+        newGrid[nextMove.y][nextMove.x] = 'cheese';
+        
+        // Llamar al onCheeseFound del comportamiento
+        onCheeseFound(moves + 1, time);
+      } else {
+        newGrid[nextMove.y][nextMove.x] = 'mouse';
+      }
+      
+      return newGrid;
+    });
+    
+    setMousePos(nextMove);
+    setMoves(prev => prev + 1);
+    
+    // Si encontró el queso, detener todo
+    if (nextMove.x === cheesePos.x && nextMove.y === cheesePos.y) {
+      if (movementRef.current) {
+        clearInterval(movementRef.current);
       }
     }
-    
-    // Si hay movimientos posibles, elegir uno aleatorio
-    if (possibleMoves.length > 0) {
-      const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
-      
-      // Actualizar grid
-      setGrid(prevGrid => {
-        const newGrid = [...prevGrid];
-        
-        // Limpiar posición anterior del ratón
-        newGrid[mousePos.y][mousePos.x] = 'empty';
-        
-        // Verificar si encontró el queso
-        if (randomMove.x === cheesePos.x && randomMove.y === cheesePos.y) {
-          setFoundCheese(true);
-          setIsRunning(false);
-          newGrid[randomMove.y][randomMove.x] = 'cheese';
-        } else {
-          newGrid[randomMove.y][randomMove.x] = 'mouse';
-        }
-        
-        return newGrid;
-      });
-      
-      setMousePos(randomMove);
-      setMoves(prev => prev + 1);
-      
-      // Si encontró el queso, detener todo
-      if (randomMove.x === cheesePos.x && randomMove.y === cheesePos.y) {
-        if (movementRef.current) {
-          clearInterval(movementRef.current);
-        }
-      }
-    }
-  }, [isRunning, mousePos, cheesePos, grid, foundCheese, gridSize]);
+  }, [isRunning, mousePos, cheesePos, grid, foundCheese, gridSize, moves, time]);
   
   // Controlar el movimiento automático
   useEffect(() => {
     if (isRunning && !foundCheese) {
-      movementRef.current = setInterval(moveMouseRandomly, speed);
+      movementRef.current = setInterval(moveMouse, speed);
     } else {
       if (movementRef.current) {
         clearInterval(movementRef.current);
@@ -267,7 +283,7 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
         clearInterval(movementRef.current);
       }
     };
-  }, [isRunning, speed, moveMouseRandomly, foundCheese]);
+  }, [isRunning, speed, moveMouse, foundCheese]);
   
   // Iniciar búsqueda
   const startSearch = () => {
@@ -308,6 +324,9 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
     setTime(0);
     setFoundCheese(false);
     setIsRunning(true);
+    
+    // Llamar al onRetry del comportamiento
+    onRetry();
   };
   
   // RESTART: Nuevo laberinto del mismo tamaño
@@ -396,12 +415,18 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
             </span>
             <span className="text-3xl">🧀</span>
           </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-red-500/20 rounded-lg transition-colors group"
-          >
-            <X className="text-gray-400 group-hover:text-white" size={24} />
-          </button>
+          <div className="flex items-center gap-4">
+            {/* Mostrar el nombre del comportamiento actual */}
+            <div className="text-sm bg-indigo-900/50 px-3 py-1 rounded-full text-indigo-300 border border-indigo-500/30">
+              🧠 {BEHAVIOR_NAME}
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors group"
+            >
+              <X className="text-gray-400 group-hover:text-white" size={24} />
+            </button>
+          </div>
         </div>
         
         {/* Contenido */}
