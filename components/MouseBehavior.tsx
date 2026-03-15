@@ -1,131 +1,111 @@
 // components/MouseBehavior.ts
-// 🐭 Comportamiento: Dirección con Memoria y Pasos Variables (3-6)
+// 🐭 Comportamiento: "Pegado a las paredes" con dosis de locura
 
-import { Position } from './MazeSimulator';
+import { Position, CellType } from './MazeSimulator';
 
 // ============================================
 // CONFIGURACIÓN DEL COMPORTAMIENTO
 // ============================================
-export const BEHAVIOR_NAME = "Dirección con Memoria (3-6 pasos aleatorios)";
-
-// Constantes de configuración
-const MIN_STEPS = 3;
-const MAX_STEPS = 6;
-const PAUSE_DURATION = 1; // segundos
+export const BEHAVIOR_NAME = "🧱 Pegado a paredes (con locura)";
 
 // ============================================
 // ESTADO INTERNO DEL COMPORTAMIENTO
 // ============================================
 interface BehaviorState {
+  // Dirección actual
   currentDirection: { x: number; y: number };
-  stepsTaken: number;
-  stepsLimit: number;
-  isPaused: boolean;
-  pauseStartTime: number;
-  totalDirectionChanges: number;
+  // Modo exploración después de un choque
+  exploring: boolean;
+  // Dirección que causó el choque (la que está bloqueada)
+  blockedDirection: { x: number; y: number };
+  // Direcciones ya probadas en la exploración actual
+  triedDirections: Array<{ x: number; y: number }>;
+  // Posición original desde la que se explora (la casilla pegada al obstáculo)
+  originalPos: Position | null;
+  // Última dirección tomada (para evitar repeticiones)
+  lastDirection: { x: number; y: number };
 }
 
-// Estado inicial
 let state: BehaviorState = {
   currentDirection: { x: 0, y: 0 },
-  stepsTaken: 0,
-  stepsLimit: MIN_STEPS,
-  isPaused: false,
-  pauseStartTime: 0,
-  totalDirectionChanges: 0
+  exploring: false,
+  blockedDirection: { x: 0, y: 0 },
+  triedDirections: [],
+  originalPos: null,
+  lastDirection: { x: 0, y: 0 }
 };
 
 // ============================================
 // FUNCIONES AUXILIARES
 // ============================================
 
-/**
- * Genera un número aleatorio entre min y max (inclusive)
- */
-const randomInt = (min: number, max: number): number => {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-};
-
-/**
- * Obtiene todas las direcciones posibles
- */
-const getDirections = () => [
-  { x: 0, y: -1, name: '⬆️ arriba' },
-  { x: 0, y: 1, name: '⬇️ abajo' },
-  { x: -1, y: 0, name: '⬅️ izquierda' },
-  { x: 1, y: 0, name: '➡️ derecha' },
+const DIRECTIONS = [
+  { x: 0, y: -1 }, // arriba
+  { x: 0, y: 1 },  // abajo
+  { x: -1, y: 0 }, // izquierda
+  { x: 1, y: 0 },  // derecha
 ];
 
-/**
- * Verifica si una posición es válida para moverse
- */
+const directionNames: Record<string, string> = {
+  '0,-1': '⬆️ arriba',
+  '0,1': '⬇️ abajo',
+  '-1,0': '⬅️ izquierda',
+  '1,0': '➡️ derecha',
+};
+
+const getDirectionKey = (dir: { x: number; y: number }) => `${dir.x},${dir.y}`;
+
+const isSameDirection = (a: { x: number; y: number }, b: { x: number; y: number }) => 
+  a.x === b.x && a.y === b.y;
+
+// Verifica si una posición es válida (no pared ni fuera de límites)
 const isValidPosition = (
-  x: number, 
-  y: number, 
-  grid: string[][], 
+  x: number,
+  y: number,
+  grid: CellType[][],
   gridSize: number
 ): boolean => {
   if (x < 0 || x >= gridSize || y < 0 || y >= gridSize) return false;
+  return grid[y][x] !== 'wall';
+};
+
+// Verifica si una posición está vacía (incluyendo queso)
+const isEmpty = (x: number, y: number, grid: CellType[][]): boolean => {
   return grid[y][x] === 'empty' || grid[y][x] === 'cheese';
 };
 
-/**
- * Encuentra todos los movimientos posibles desde la posición actual
- */
-const findPossibleMoves = (
-  grid: string[][],
-  mousePos: Position,
-  gridSize: number
-): Position[] => {
-  const possibleMoves: Position[] = [];
-  const directions = getDirections();
-  
-  for (const dir of directions) {
-    const newX = mousePos.x + dir.x;
-    const newY = mousePos.y + dir.y;
-    
-    if (isValidPosition(newX, newY, grid, gridSize)) {
-      possibleMoves.push({ x: newX, y: newY });
+// Verifica si una casilla tiene al menos una pared adyacente (colindante)
+const hasAdjacentWall = (x: number, y: number, grid: CellType[][], gridSize: number): boolean => {
+  for (const dir of DIRECTIONS) {
+    const nx = x + dir.x;
+    const ny = y + dir.y;
+    if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize) {
+      if (grid[ny][nx] === 'wall') return true;
     }
   }
-  
-  return possibleMoves;
+  return false;
 };
 
-/**
- * Elige una dirección aleatoria válida
- */
-const chooseRandomDirection = (
-  grid: string[][],
-  mousePos: Position,
+// Obtiene todas las direcciones posibles desde una posición (excluyendo paredes)
+const getPossibleDirections = (
+  pos: Position,
+  grid: CellType[][],
   gridSize: number
-): { x: number; y: number } => {
-  const possibleMoves = findPossibleMoves(grid, mousePos, gridSize);
-  
-  if (possibleMoves.length === 0) {
-    return { x: 0, y: 0 };
+): Array<{ x: number; y: number }> => {
+  const possible: Array<{ x: number; y: number }> = [];
+  for (const dir of DIRECTIONS) {
+    const nx = pos.x + dir.x;
+    const ny = pos.y + dir.y;
+    if (isValidPosition(nx, ny, grid, gridSize) && isEmpty(nx, ny, grid)) {
+      possible.push(dir);
+    }
   }
-  
-  const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
-  return {
-    x: randomMove.x - mousePos.x,
-    y: randomMove.y - mousePos.y
-  };
+  return possible;
 };
 
-/**
- * Verifica si la dirección actual tiene un obstáculo delante
- */
-const hasObstacleAhead = (
-  direction: { x: number; y: number },
-  grid: string[][],
-  mousePos: Position,
-  gridSize: number
-): boolean => {
-  const newX = mousePos.x + direction.x;
-  const newY = mousePos.y + direction.y;
-  
-  return !isValidPosition(newX, newY, grid, gridSize);
+// Elige una dirección aleatoria de una lista
+const randomDirection = (dirs: Array<{ x: number; y: number }>) => {
+  return dirs[Math.floor(Math.random() * dirs.length)];
 };
 
 // ============================================
@@ -133,125 +113,112 @@ const hasObstacleAhead = (
 // ============================================
 
 export function getNextMouseMove(
-  grid: string[][],
+  grid: CellType[][],
   mousePos: Position,
   cheesePos: Position,
   moves: number,
   time: number,
-  gridSize: number
+  gridSize: number,
+  crazyPercentage: number // Nuevo parámetro
 ): Position | null {
   
   // ========================================
-  // MANEJO DE PAUSA
+  // PROBABILIDAD DE LOCURA
   // ========================================
-  if (state.isPaused) {
-    // Inicializar tiempo de pausa si es primera vez
-    if (state.pauseStartTime === 0) {
-      state.pauseStartTime = time;
-      console.log('⏸️ Ratón en pausa...');
-    }
-    
-    // Verificar si ya pasó el tiempo de pausa
-    if (time - state.pauseStartTime >= PAUSE_DURATION) {
-      state.isPaused = false;
-      state.pauseStartTime = 0;
-      console.log('▶️ Ratón reanuda movimiento');
+  const randomValue = Math.random() * 100;
+  if (randomValue < crazyPercentage) {
+    // Movimiento aleatorio entre los posibles
+    const possibleDirs = getPossibleDirections(mousePos, grid, gridSize);
+    if (possibleDirs.length === 0) return null;
+    const randomDir = randomDirection(possibleDirs);
+    console.log('🤪 ¡LOCURA! Movimiento aleatorio');
+    return {
+      x: mousePos.x + randomDir.x,
+      y: mousePos.y + randomDir.y
+    };
+  }
+  
+  // ========================================
+  // COMPORTAMIENTO NORMAL
+  // ========================================
+  
+  // Si estamos en modo exploración (después de un choque)
+  if (state.exploring && state.originalPos) {
+    // Verificamos si la posición actual es la original (debería serlo)
+    // Si no, algo salió mal, salimos del modo exploración
+    if (mousePos.x !== state.originalPos.x || mousePos.y !== state.originalPos.y) {
+      console.warn('⚠️ Salida del modo exploración por posición incorrecta');
+      state.exploring = false;
+      state.triedDirections = [];
+      state.originalPos = null;
     } else {
-      // Todavía en pausa
-      return null;
+      // Estamos en la posición original, probamos una nueva dirección no probada
+      const possibleDirs = getPossibleDirections(mousePos, grid, gridSize).filter(
+        dir => !state.triedDirections.some(d => isSameDirection(d, dir)) &&
+               !isSameDirection(dir, state.blockedDirection)
+      );
+      
+      if (possibleDirs.length === 0) {
+        // No hay más direcciones para probar, elegimos una aleatoria de las posibles originales
+        // (esto no debería ocurrir si hay al menos una salida)
+        console.log('⚠️ Sin direcciones nuevas, saliendo de exploración');
+        state.exploring = false;
+        state.triedDirections = [];
+        state.originalPos = null;
+        // Intentar movimiento normal
+      } else {
+        // Elegir una dirección aleatoria entre las posibles
+        const newDir = randomDirection(possibleDirs);
+        const newX = mousePos.x + newDir.x;
+        const newY = mousePos.y + newDir.y;
+        
+        // Verificar si la nueva posición tiene una pared adyacente
+        if (hasAdjacentWall(newX, newY, grid, gridSize)) {
+          // Si tiene pared, nos movemos y salimos del modo exploración
+          console.log(`🧱 Encontrada dirección con pared: ${directionNames[getDirectionKey(newDir)]}`);
+          state.exploring = false;
+          state.triedDirections = [];
+          state.originalPos = null;
+          state.currentDirection = newDir;
+          return { x: newX, y: newY };
+        } else {
+          // No tiene pared, marcamos como probada y volvemos a la original (sin mover)
+          console.log(`↩️ Dirección ${directionNames[getDirectionKey(newDir)]} sin pared, probando otra`);
+          state.triedDirections.push(newDir);
+          // No nos movemos, devolvemos null para que el ratón no se mueva en este ciclo
+          // Pero necesitamos que en el próximo ciclo se vuelva a llamar a getNextMouseMove
+          // con la misma posición. Devolvemos null para indicar que no hay movimiento.
+          return null;
+        }
+      }
     }
   }
   
-  // ========================================
-  // INICIALIZACIÓN (PRIMER MOVIMIENTO)
-  // ========================================
-  if (state.currentDirection.x === 0 && state.currentDirection.y === 0) {
-    state.currentDirection = chooseRandomDirection(grid, mousePos, gridSize);
-    state.stepsLimit = randomInt(MIN_STEPS, MAX_STEPS);
-    state.stepsTaken = 0;
-    state.totalDirectionChanges = 0;
-    
-    console.log(`🆕 Primera dirección: ${getDirections().find(d => 
-      d.x === state.currentDirection.x && d.y === state.currentDirection.y
-    )?.name || 'desconocida'} (${state.stepsLimit} pasos máx.)`);
-  }
+  // Si no estamos en modo exploración, comportamiento normal
   
-  // ========================================
-  // VERIFICAR CONDICIONES DE CAMBIO
-  // ========================================
+  // Verificar si hay un obstáculo delante en la dirección actual
+  const nextX = mousePos.x + state.currentDirection.x;
+  const nextY = mousePos.y + state.currentDirection.y;
   
-  // Condición 1: Obstáculo delante
-  const obstacleDetected = hasObstacleAhead(
-    state.currentDirection, 
-    grid, 
-    mousePos, 
-    gridSize
-  );
+  const isObstacle = !isValidPosition(nextX, nextY, grid, gridSize) || grid[nextY][nextX] === 'wall';
   
-  // Condición 2: Límite de pasos alcanzado
-  const limitReached = state.stepsTaken >= state.stepsLimit;
-  
-  // Si se cumple alguna condición, cambiar dirección
-  if (obstacleDetected || limitReached) {
-    
-    // Activar pausa
-    state.isPaused = true;
-    state.pauseStartTime = 0; // Se inicializará en el próximo ciclo
-    state.stepsTaken = 0;
-    state.totalDirectionChanges++;
-    
-    // Elegir nueva dirección
-    const newDirection = chooseRandomDirection(grid, mousePos, gridSize);
-    
-    // Si no hay dirección posible, devolver null
-    if (newDirection.x === 0 && newDirection.y === 0) {
-      console.log('⚠️ ¡Ratón atrapado! No hay movimientos posibles');
-      return null;
-    }
-    
-    state.currentDirection = newDirection;
-    state.stepsLimit = randomInt(MIN_STEPS, MAX_STEPS);
-    
-    // Log del cambio
-    const directionName = getDirections().find(d => 
-      d.x === state.currentDirection.x && d.y === state.currentDirection.y
-    )?.name || 'desconocida';
-    
-    if (obstacleDetected) {
-      console.log(`🚧 Obstáculo encontrado después de ${state.stepsTaken} pasos - Cambio #${state.totalDirectionChanges} → ${directionName} (${state.stepsLimit} pasos)`);
-    } else {
-      console.log(`⏱️ Límite de ${state.stepsLimit} pasos alcanzado - Cambio #${state.totalDirectionChanges} → ${directionName} (${state.stepsLimit} pasos)`);
-    }
-    
-    return null; // No se mueve en este ciclo (entra en pausa)
-  }
-  
-  // ========================================
-  // MOVERSE EN LA DIRECCIÓN ACTUAL
-  // ========================================
-  const nextPos = {
-    x: mousePos.x + state.currentDirection.x,
-    y: mousePos.y + state.currentDirection.y
-  };
-  
-  // Verificación de seguridad
-  if (!isValidPosition(nextPos.x, nextPos.y, grid, gridSize)) {
-    console.log('⚠️ Posición inválida detectada, recalculando...');
-    state.currentDirection = chooseRandomDirection(grid, mousePos, gridSize);
-    state.stepsLimit = randomInt(MIN_STEPS, MAX_STEPS);
-    state.stepsTaken = 0;
+  if (isObstacle) {
+    // ¡Chocamos! Entramos en modo exploración
+    console.log(`🚧 Choque con obstáculo en dirección ${directionNames[getDirectionKey(state.currentDirection)]}`);
+    state.exploring = true;
+    state.blockedDirection = { ...state.currentDirection };
+    state.triedDirections = [];
+    state.originalPos = { ...mousePos };
+    // No nos movemos, devolvemos null para que en el próximo ciclo explore
     return null;
   }
   
-  // Incrementar contador de pasos
-  state.stepsTaken++;
+  // No hay obstáculo, podemos movernos en la dirección actual
+  // Pero antes, verificamos si la nueva posición tiene pared adyacente? No, según la descripción,
+  // si no hay obstáculo, simplemente seguimos en esa dirección. La condición de "si tras elegir una dirección y moverse a una casilla vacía, esta es colindante con un obstáculo, no se aplicará lo anterior" se refiere al proceso de exploración.
   
-  // Verificar si encontró el queso (para log opcional)
-  if (nextPos.x === cheesePos.x && nextPos.y === cheesePos.y) {
-    console.log(`🧀 ¡QUESO A LA VISTA! Posición: (${nextPos.x}, ${nextPos.y})`);
-  }
-  
-  return nextPos;
+  // Movimiento normal
+  return { x: nextX, y: nextY };
 }
 
 // ============================================
@@ -259,26 +226,31 @@ export function getNextMouseMove(
 // ============================================
 
 export function onInit(
-  grid: string[][],
+  grid: CellType[][],
   mousePos: Position,
   cheesePos: Position,
   gridSize: number
 ): void {
-  // Reiniciar estado completo
+  // Reiniciar estado
   state = {
-    currentDirection: { x: 0, y: 0 },
-    stepsTaken: 0,
-    stepsLimit: MIN_STEPS,
-    isPaused: false,
-    pauseStartTime: 0,
-    totalDirectionChanges: 0
+    currentDirection: { x: 0, y: 1 }, // empezamos hacia abajo por defecto
+    exploring: false,
+    blockedDirection: { x: 0, y: 0 },
+    triedDirections: [],
+    originalPos: null,
+    lastDirection: { x: 0, y: 0 }
   };
   
+  // Elegir una dirección inicial aleatoria entre las posibles
+  const possibleDirs = getPossibleDirections(mousePos, grid, gridSize);
+  if (possibleDirs.length > 0) {
+    state.currentDirection = randomDirection(possibleDirs);
+  }
+  
   console.log('\n' + '='.repeat(50));
-  console.log('🧠 NUEVA SIMULACIÓN INICIADA');
-  console.log(`📋 Comportamiento: ${BEHAVIOR_NAME}`);
-  console.log(`⚙️ Configuración: Pasos entre ${MIN_STEPS}-${MAX_STEPS} | Pausa: ${PAUSE_DURATION}s`);
+  console.log('🧠 NUEVO COMPORTAMIENTO: Pegado a paredes');
   console.log(`📍 Ratón: (${mousePos.x}, ${mousePos.y}) | Queso: (${cheesePos.x}, ${cheesePos.y})`);
+  console.log(`🎲 Dirección inicial: ${directionNames[getDirectionKey(state.currentDirection)]}`);
   console.log('='.repeat(50) + '\n');
 }
 
@@ -289,25 +261,18 @@ export function onCheeseFound(
   console.log('\n' + '🎉'.repeat(15));
   console.log('🎉 ¡QUESO ENCONTRADO! 🎉');
   console.log('🎉'.repeat(15));
-  console.log(`📊 Estadísticas finales:`);
-  console.log(`   • Movimientos totales: ${moves}`);
-  console.log(`   • Tiempo: ${time} segundos`);
-  console.log(`   • Cambios de dirección: ${state.totalDirectionChanges}`);
-  console.log(`   • Promedio: ${(moves / time).toFixed(2)} mov/seg`);
-  console.log(`   • Eficiencia: ${(state.totalDirectionChanges / moves * 100).toFixed(1)}% cambios/mov`);
-  console.log('='.repeat(30) + '\n');
+  console.log(`📊 Movimientos: ${moves} | Tiempo: ${time}s`);
 }
 
 export function onRetry(): void {
-  // Reiniciar estado pero mantener el mismo laberinto
+  // Reiniciar estado, pero la dirección se recalculará en el próximo movimiento
   state = {
-    currentDirection: { x: 0, y: 0 },
-    stepsTaken: 0,
-    stepsLimit: MIN_STEPS,
-    isPaused: false,
-    pauseStartTime: 0,
-    totalDirectionChanges: 0
+    currentDirection: { x: 0, y: 1 },
+    exploring: false,
+    blockedDirection: { x: 0, y: 0 },
+    triedDirections: [],
+    originalPos: null,
+    lastDirection: { x: 0, y: 0 }
   };
-  
-  console.log('🔄 RETRY - Reiniciando con mismo laberinto');
+  console.log('🔄 RETRY - Reiniciando comportamiento');
 }

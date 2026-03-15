@@ -1,17 +1,20 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { X, ChevronDown } from 'lucide-react';
+import { X, ChevronDown, Brain } from 'lucide-react';
 import { getNextMouseMove, onInit, onCheeseFound, onRetry, BEHAVIOR_NAME } from './MouseBehavior';
 
 // Constantes
 const MIN_SIZE = 10;
 const MAX_SIZE = 60;
 const DEFAULT_SIZE = 30;
-const MIN_WALL_PERCENT = 0;
-const MAX_WALL_PERCENT = 40; // Máximo 40% de paredes para garantizar conectividad
-const DEFAULT_WALL_PERCENT = 25;
+const MIN_DENSITY = 10; // %
+const MAX_DENSITY = 50; // %
+const DEFAULT_DENSITY = 25;
 const INITIAL_SPEED = 150;
+const MIN_CRAZY = 0;
+const MAX_CRAZY = 100;
+const DEFAULT_CRAZY = 10; // 10% de locura
 
 // Tipos de celdas
 export type CellType = 'empty' | 'wall' | 'mouse' | 'cheese';
@@ -22,12 +25,12 @@ export interface Position {
   y: number;
 }
 
-// Direcciones para BFS
+// Direcciones
 const DIRECTIONS = [
-  { x: 0, y: -1 },
-  { x: 0, y: 1 },
-  { x: -1, y: 0 },
-  { x: 1, y: 0 },
+  { x: 0, y: -1 }, // arriba
+  { x: 0, y: 1 },  // abajo
+  { x: -1, y: 0 }, // izquierda
+  { x: 1, y: 0 },  // derecha
 ];
 
 interface MazeSimulatorProps {
@@ -67,88 +70,23 @@ const hasPath = (
   return false;
 };
 
-// Obtener todas las posiciones vacías (no pared)
-const getEmptyPositions = (grid: CellType[][]): Position[] => {
-  const empty: Position[] = [];
-  for (let y = 0; y < grid.length; y++) {
-    for (let x = 0; x < grid.length; x++) {
-      if (grid[y][x] === 'empty') {
-        empty.push({ x, y });
-      }
-    }
-  }
-  return empty;
-};
-
-// Elegir posiciones aleatorias para ratón y queso que tengan camino
-const placeMouseAndCheese = (
-  grid: CellType[][],
-  setMousePos: (pos: Position) => void,
-  setCheesePos: (pos: Position) => void,
-  setGrid: (grid: CellType[][]) => void
-): boolean => {
+// Generar posición aleatoria válida (no pared)
+const getRandomEmptyPosition = (grid: CellType[][], exclude?: Position): Position => {
   const size = grid.length;
-  const emptyPositions = getEmptyPositions(grid);
+  let attempts = 0;
+  const maxAttempts = 1000;
   
-  if (emptyPositions.length < 2) return false; // No hay suficientes espacios
-  
-  // Intentar hasta encontrar un par con camino
-  const maxAttempts = 100;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // Elegir dos posiciones distintas aleatorias
-    const mouseIndex = Math.floor(Math.random() * emptyPositions.length);
-    let cheeseIndex;
-    do {
-      cheeseIndex = Math.floor(Math.random() * emptyPositions.length);
-    } while (cheeseIndex === mouseIndex);
-    
-    const mousePos = emptyPositions[mouseIndex];
-    const cheesePos = emptyPositions[cheeseIndex];
-    
-    // Verificar camino
-    if (hasPath(grid, mousePos, cheesePos)) {
-      // Colocar en grid (sin modificar el original hasta confirmar)
-      const newGrid = grid.map(row => [...row]); // copia
-      // Limpiar posibles marcadores anteriores
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          if (newGrid[y][x] === 'mouse' || newGrid[y][x] === 'cheese') {
-            newGrid[y][x] = 'empty';
-          }
-        }
-      }
-      newGrid[mousePos.y][mousePos.x] = 'mouse';
-      newGrid[cheesePos.y][cheesePos.x] = 'cheese';
-      
-      setGrid(newGrid);
-      setMousePos(mousePos);
-      setCheesePos(cheesePos);
-      return true;
+  while (attempts < maxAttempts) {
+    const x = Math.floor(Math.random() * (size - 2)) + 1; // evitar bordes
+    const y = Math.floor(Math.random() * (size - 2)) + 1;
+    if (grid[y][x] === 'empty' && (!exclude || !(x === exclude.x && y === exclude.y))) {
+      return { x, y };
     }
+    attempts++;
   }
   
-  // Si no se encuentra, usar las dos primeras vacías (debería haber camino en laberinto generado)
-  if (emptyPositions.length >= 2) {
-    const mousePos = emptyPositions[0];
-    const cheesePos = emptyPositions[1];
-    const newGrid = grid.map(row => [...row]);
-    // Limpiar
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        if (newGrid[y][x] === 'mouse' || newGrid[y][x] === 'cheese') {
-          newGrid[y][x] = 'empty';
-        }
-      }
-    }
-    newGrid[mousePos.y][mousePos.x] = 'mouse';
-    newGrid[cheesePos.y][cheesePos.x] = 'cheese';
-    setGrid(newGrid);
-    setMousePos(mousePos);
-    setCheesePos(cheesePos);
-    return true;
-  }
-  
-  return false;
+  // Si no encuentra, devolver una posición por defecto
+  return { x: 1, y: 1 };
 };
 
 const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
@@ -164,132 +102,114 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
   const [foundCheese, setFoundCheese] = useState(false);
   const [showSizeSelector, setShowSizeSelector] = useState(true);
   const [gridSize, setGridSize] = useState(DEFAULT_SIZE);
-  const [wallPercent, setWallPercent] = useState(DEFAULT_WALL_PERCENT);
+  const [wallDensity, setWallDensity] = useState(DEFAULT_DENSITY);
+  const [crazyPercentage, setCrazyPercentage] = useState(DEFAULT_CRAZY);
   
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const movementRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Generar laberinto con porcentaje de paredes dado y con camino garantizado entre todas las celdas?
-  // Nota: No garantizamos que todas las celdas vacías estén conectadas, pero sí que al menos haya un camino entre dos puntos cualesquiera que elijamos después.
-  // Para ello, generamos con paredes aleatorias, luego verificamos que haya al menos un par de celdas vacías conectadas.
-  // Pero en placeMouseAndCheese nos aseguramos de que el par elegido tenga camino.
-  const generateMaze = useCallback((size: number, wallPercent: number): CellType[][] => {
-    const newGrid: CellType[][] = [];
-    
-    // Inicializar grid vacío
-    for (let y = 0; y < size; y++) {
-      const row: CellType[] = [];
-      for (let x = 0; x < size; x++) {
-        row.push('empty');
-      }
-      newGrid.push(row);
-    }
-    
-    // Bordes siempre son paredes
-    for (let y = 0; y < size; y++) {
-      newGrid[y][0] = 'wall';
-      newGrid[y][size - 1] = 'wall';
-    }
-    for (let x = 0; x < size; x++) {
-      newGrid[0][x] = 'wall';
-      newGrid[size - 1][x] = 'wall';
-    }
-    
-    // Calcular cuántas paredes internas poner (basado en porcentaje)
-    const totalInternalCells = (size - 2) * (size - 2);
-    const targetWalls = Math.floor(totalInternalCells * (wallPercent / 100));
-    let wallsPlaced = 0;
-    
-    // Poner paredes aleatorias hasta alcanzar el objetivo
-    const maxAttempts = 10000;
+  // Generar laberinto con camino garantizado y posiciones aleatorias
+  const generateMaze = useCallback((size: number, density: number) => {
     let attempts = 0;
-    while (wallsPlaced < targetWalls && attempts < maxAttempts) {
-      const x = Math.floor(Math.random() * (size - 2)) + 1;
-      const y = Math.floor(Math.random() * (size - 2)) + 1;
-      if (newGrid[y][x] === 'empty') {
-        newGrid[y][x] = 'wall';
-        wallsPlaced++;
+    const maxAttempts = 100;
+    
+    while (attempts < maxAttempts) {
+      const newGrid: CellType[][] = [];
+      
+      // Inicializar grid vacío
+      for (let y = 0; y < size; y++) {
+        const row: CellType[] = [];
+        for (let x = 0; x < size; x++) {
+          row.push('empty');
+        }
+        newGrid.push(row);
       }
+      
+      // Bordes siempre son paredes
+      for (let y = 0; y < size; y++) {
+        newGrid[y][0] = 'wall';
+        newGrid[y][size - 1] = 'wall';
+      }
+      for (let x = 0; x < size; x++) {
+        newGrid[0][x] = 'wall';
+        newGrid[size - 1][x] = 'wall';
+      }
+      
+      // Generar paredes internas según densidad
+      const wallProbability = density / 100;
+      for (let y = 1; y < size - 1; y++) {
+        for (let x = 1; x < size - 1; x++) {
+          if (Math.random() < wallProbability) {
+            newGrid[y][x] = 'wall';
+          }
+        }
+      }
+      
+      // Elegir posiciones aleatorias para ratón y queso
+      const mousePosTemp = getRandomEmptyPosition(newGrid);
+      const cheesePosTemp = getRandomEmptyPosition(newGrid, mousePosTemp);
+      
+      // Verificar si hay camino entre ellos
+      if (hasPath(newGrid, mousePosTemp, cheesePosTemp)) {
+        newGrid[mousePosTemp.y][mousePosTemp.x] = 'mouse';
+        newGrid[cheesePosTemp.y][cheesePosTemp.x] = 'cheese';
+        
+        setMousePos(mousePosTemp);
+        setCheesePos(cheesePosTemp);
+        setGrid(newGrid);
+        setMoves(0);
+        setTime(0);
+        setFoundCheese(false);
+        setShowSizeSelector(false);
+        
+        // Llamar al onInit del comportamiento
+        onInit(newGrid, mousePosTemp, cheesePosTemp, size);
+        
+        return true;
+      }
+      
       attempts++;
     }
     
-    return newGrid;
-  }, []);
-  
-  // Inicializar nuevo laberinto (RESTART)
-  const handleRestart = useCallback(() => {
-    setIsRunning(false);
-    setFoundCheese(false);
-    setMoves(0);
-    setTime(0);
-    
-    // Generar nuevo laberinto
-    let newGrid = generateMaze(gridSize, wallPercent);
-    setGrid(newGrid);
-    
-    // Colocar ratón y queso aleatoriamente con camino
-    const success = placeMouseAndCheese(newGrid, setMousePos, setCheesePos, setGrid);
-    if (!success) {
-      // Si falla, intentar con menos paredes (regenerar con porcentaje más bajo)
-      console.warn('No se pudo colocar ratón y queso, reduciendo paredes');
-      const saferPercent = Math.max(10, wallPercent - 10);
-      newGrid = generateMaze(gridSize, saferPercent);
-      setGrid(newGrid);
-      placeMouseAndCheese(newGrid, setMousePos, setCheesePos, setGrid);
-    }
-    
-    setShowSizeSelector(false);
-    
-    // Llamar al onInit del comportamiento con el nuevo grid
-    // Nota: El grid ya tiene mouse y cheese, pero pasamos las posiciones actuales
-    onInit(newGrid, mousePos, cheesePos, gridSize); // mousePos y cheesePos aún no actualizados? Usar timeout o efecto.
-    // Mejor usar useEffect para cuando cambien las posiciones, pero por ahora podemos llamar después de actualizar.
-    // Como setGrid es asíncrono, podemos usar un pequeño timeout o confiar en que el próximo ciclo lo hará.
-    // Alternativa: pasar las nuevas posiciones después de set.
-    setTimeout(() => {
-      onInit(grid, mousePos, cheesePos, gridSize);
-    }, 0);
-  }, [gridSize, wallPercent, generateMaze, mousePos, cheesePos, grid]);
-  
-  // RETRY: Reiniciar con el mismo laberinto pero nuevas posiciones aleatorias
-  const handleRetry = useCallback(() => {
-    setIsRunning(false);
-    setFoundCheese(false);
-    setMoves(0);
-    setTime(0);
-    
-    // Usar el mismo grid (sin cambios en paredes)
-    const currentGrid = grid.map(row => [...row]); // copia
-    // Limpiar marcadores de ratón y queso
-    for (let y = 0; y < gridSize; y++) {
-      for (let x = 0; x < gridSize; x++) {
-        if (currentGrid[y][x] === 'mouse' || currentGrid[y][x] === 'cheese') {
-          currentGrid[y][x] = 'empty';
+    // Si no se pudo generar después de muchos intentos, crear un laberinto simple sin paredes internas
+    const simpleGrid: CellType[][] = [];
+    for (let y = 0; y < size; y++) {
+      const row: CellType[] = [];
+      for (let x = 0; x < size; x++) {
+        if (x === 0 || y === 0 || x === size - 1 || y === size - 1) {
+          row.push('wall');
+        } else {
+          row.push('empty');
         }
       }
-    }
-    setGrid(currentGrid);
-    
-    // Colocar nuevas posiciones aleatorias
-    const success = placeMouseAndCheese(currentGrid, setMousePos, setCheesePos, setGrid);
-    if (!success) {
-      console.warn('No se pudo colocar en RETRY');
+      simpleGrid.push(row);
     }
     
-    // Llamar a onRetry del comportamiento
-    onRetry();
-    // Reiniciar también el estado del comportamiento con nuevas posiciones
-    setTimeout(() => {
-      onInit(grid, mousePos, cheesePos, gridSize);
-    }, 0);
-  }, [grid, gridSize]);
-  
-  // Inicializar al montar el componente
-  useEffect(() => {
-    handleRestart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Posiciones aleatorias en el laberinto simple
+    const mousePosTemp = getRandomEmptyPosition(simpleGrid);
+    const cheesePosTemp = getRandomEmptyPosition(simpleGrid, mousePosTemp);
+    
+    simpleGrid[mousePosTemp.y][mousePosTemp.x] = 'mouse';
+    simpleGrid[cheesePosTemp.y][cheesePosTemp.x] = 'cheese';
+    
+    setMousePos(mousePosTemp);
+    setCheesePos(cheesePosTemp);
+    setGrid(simpleGrid);
+    setMoves(0);
+    setTime(0);
+    setFoundCheese(false);
+    setShowSizeSelector(false);
+    
+    onInit(simpleGrid, mousePosTemp, cheesePosTemp, size);
+    
+    return true;
   }, []);
+  
+  // Inicializar con valores por defecto
+  useEffect(() => {
+    generateMaze(DEFAULT_SIZE, DEFAULT_DENSITY);
+  }, [generateMaze]);
   
   // Timer
   useEffect(() => {
@@ -314,30 +234,47 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
   const moveMouse = useCallback(() => {
     if (!isRunning || foundCheese) return;
     
+    // Obtener el siguiente movimiento desde el comportamiento externo
     const nextMove = getNextMouseMove(
       grid,
       mousePos,
       cheesePos,
       moves,
       time,
-      gridSize
+      gridSize,
+      crazyPercentage // Pasamos el porcentaje de locura al comportamiento
     );
     
+    // Si no hay movimiento posible, no hacer nada
     if (!nextMove) return;
     
-    // Validar movimiento
-    if (nextMove.x < 0 || nextMove.x >= gridSize || nextMove.y < 0 || nextMove.y >= gridSize) return;
-    if (grid[nextMove.y][nextMove.x] === 'wall') return;
+    // Verificar que el movimiento sea válido (por seguridad)
+    const isValidMove = (() => {
+      if (nextMove.x < 0 || nextMove.x >= gridSize || nextMove.y < 0 || nextMove.y >= gridSize) {
+        return false;
+      }
+      if (grid[nextMove.y][nextMove.x] === 'wall') {
+        return false;
+      }
+      return true;
+    })();
+    
+    if (!isValidMove) return;
     
     // Actualizar grid
     setGrid(prevGrid => {
       const newGrid = [...prevGrid];
+      
+      // Limpiar posición anterior del ratón
       newGrid[mousePos.y][mousePos.x] = 'empty';
       
+      // Verificar si encontró el queso
       if (nextMove.x === cheesePos.x && nextMove.y === cheesePos.y) {
         setFoundCheese(true);
         setIsRunning(false);
         newGrid[nextMove.y][nextMove.x] = 'cheese';
+        
+        // Llamar al onCheeseFound del comportamiento
         onCheeseFound(moves + 1, time);
       } else {
         newGrid[nextMove.y][nextMove.x] = 'mouse';
@@ -349,14 +286,15 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
     setMousePos(nextMove);
     setMoves(prev => prev + 1);
     
+    // Si encontró el queso, detener todo
     if (nextMove.x === cheesePos.x && nextMove.y === cheesePos.y) {
       if (movementRef.current) {
         clearInterval(movementRef.current);
       }
     }
-  }, [isRunning, mousePos, cheesePos, grid, foundCheese, gridSize, moves, time]);
+  }, [isRunning, mousePos, cheesePos, grid, foundCheese, gridSize, moves, time, crazyPercentage]);
   
-  // Controlar movimiento automático
+  // Controlar el movimiento automático
   useEffect(() => {
     if (isRunning && !foundCheese) {
       movementRef.current = setInterval(moveMouse, speed);
@@ -374,7 +312,9 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
   }, [isRunning, speed, moveMouse, foundCheese]);
   
   // Iniciar búsqueda
-  const startSearch = () => setIsRunning(true);
+  const startSearch = () => {
+    setIsRunning(true);
+  };
   
   // Detener búsqueda (abrir menú)
   const stopSearch = () => {
@@ -388,17 +328,58 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
     setIsRunning(true);
   };
   
-  // Cambiar tamaño y regenerar
+  // RETRY: Reiniciar con el mismo laberinto (nuevas posiciones aleatorias)
+  const handleRetry = () => {
+    setShowSettings(false);
+    
+    // Generar nuevas posiciones aleatorias en el mismo grid
+    const newGrid = grid.map(row => [...row]);
+    
+    // Limpiar ratón y queso actuales
+    newGrid[mousePos.y][mousePos.x] = 'empty';
+    newGrid[cheesePos.y][cheesePos.x] = 'empty';
+    
+    // Elegir nuevas posiciones
+    const newMousePos = getRandomEmptyPosition(newGrid);
+    const newCheesePos = getRandomEmptyPosition(newGrid, newMousePos);
+    
+    newGrid[newMousePos.y][newMousePos.x] = 'mouse';
+    newGrid[newCheesePos.y][newCheesePos.x] = 'cheese';
+    
+    setGrid(newGrid);
+    setMousePos(newMousePos);
+    setCheesePos(newCheesePos);
+    setMoves(0);
+    setTime(0);
+    setFoundCheese(false);
+    setIsRunning(true);
+    
+    // Llamar al onRetry del comportamiento
+    onRetry();
+    // También onInit para reiniciar estado interno
+    onInit(newGrid, newMousePos, newCheesePos, gridSize);
+  };
+  
+  // RESTART: Nuevo laberinto del mismo tamaño y densidad
+  const handleRestart = () => {
+    setShowSettings(false);
+    generateMaze(gridSize, wallDensity);
+    setIsRunning(true);
+  };
+  
+  // Cambiar tamaño y generar nuevo laberinto
   const handleSizeChange = (newSize: number) => {
     setGridSize(newSize);
-    // No regeneramos automáticamente, esperamos a que pulsen "Generar"
+    generateMaze(newSize, wallDensity);
   };
   
-  const handleGenerateClick = () => {
-    handleRestart();
+  // Cambiar densidad y generar nuevo laberinto
+  const handleDensityChange = (newDensity: number) => {
+    setWallDensity(newDensity);
+    generateMaze(gridSize, newDensity);
   };
   
-  // Calcular tamaño de celda
+  // Calcular tamaño de celda basado en el grid
   const getCellSize = () => {
     if (gridSize <= 20) return 18;
     if (gridSize <= 30) return 14;
@@ -408,8 +389,24 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
   
   const cellSize = getCellSize();
   
-  // Renderizar grid
+  // Renderizar el grid
   const renderGrid = () => {
+    const gridWithMouse = grid.map((row, y) => [...row]);
+    
+    // Actualizar con posiciones actuales si no hay grid
+    if (gridWithMouse.length > 0) {
+      // Asegurar que el ratón y el queso estén representados
+      if (!foundCheese) {
+        gridWithMouse[cheesePos.y][cheesePos.x] = 'cheese';
+      }
+      
+      if (isRunning && !foundCheese) {
+        gridWithMouse[mousePos.y][mousePos.x] = 'mouse';
+      } else if (foundCheese) {
+        gridWithMouse[cheesePos.y][cheesePos.x] = 'cheese';
+      }
+    }
+    
     return (
       <div 
         className="grid gap-px bg-gray-800 p-1 overflow-auto max-h-[500px]"
@@ -418,7 +415,7 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
           gridTemplateColumns: `repeat(${gridSize}, ${cellSize}px)`,
         }}
       >
-        {grid.map((row, y) => (
+        {gridWithMouse.map((row, y) => (
           row.map((cell, x) => (
             <div
               key={`${x}-${y}`}
@@ -427,10 +424,10 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
                 width: cellSize,
                 height: cellSize,
                 backgroundColor: 
-                  cell === 'mouse' ? '#FF4500' :
-                  cell === 'cheese' ? '#FFD700' :
-                  cell === 'wall' ? '#1E3A5F' :
-                  '#E8F0FE',
+                  cell === 'mouse' ? '#FF4500' : // Naranja brillante
+                  cell === 'cheese' ? '#FFD700' : // Amarillo dorado
+                  cell === 'wall' ? '#1E3A5F' : // Azul oscuro
+                  '#E8F0FE', // Azul muy claro para caminos
                 boxShadow: cell === 'mouse' ? '0 0 8px #FF4500' :
                           cell === 'cheese' ? '0 0 8px #FFD700' : 'none',
                 border: cell === 'wall' ? '1px solid #0A1929' : 'none',
@@ -471,57 +468,71 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
         {/* Contenido */}
         <div className="flex-1 overflow-auto p-6">
           
-          {/* Selector de tamaño y porcentaje de paredes */}
+          {/* Selector de tamaño y densidad */}
           {showSizeSelector && (
-            <div className="mb-6 p-6 bg-indigo-900/30 rounded-xl border border-indigo-500/30">
+            <div className="mb-6 p-6 bg-indigo-900/30 rounded-xl border border-indigo-500/30 space-y-4">
               <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                 <ChevronDown className="text-indigo-400" />
                 Configuración del laberinto
               </h3>
               
-              <div className="space-y-6">
-                {/* Tamaño */}
-                <div>
-                  <label className="block text-sm font-medium text-indigo-300 mb-2">
-                    Tamaño: {gridSize}x{gridSize}
-                  </label>
-                  <input
-                    type="range"
-                    min={MIN_SIZE}
-                    max={MAX_SIZE}
-                    value={gridSize}
-                    onChange={(e) => handleSizeChange(parseInt(e.target.value))}
-                    className="w-full h-2 bg-indigo-900 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-                
-                {/* Porcentaje de paredes */}
-                <div>
-                  <label className="block text-sm font-medium text-indigo-300 mb-2">
-                    Densidad de paredes: {wallPercent}% (máx 40% para garantizar conectividad)
-                  </label>
-                  <input
-                    type="range"
-                    min={MIN_WALL_PERCENT}
-                    max={MAX_WALL_PERCENT}
-                    value={wallPercent}
-                    onChange={(e) => setWallPercent(parseInt(e.target.value))}
-                    className="w-full h-2 bg-indigo-900 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <p className="text-xs text-indigo-400 mt-1">
-                    {wallPercent <= 15 ? '🍃 Laberinto abierto' : 
-                     wallPercent <= 25 ? '🌿 Laberinto normal' : 
-                     '🌲 Laberinto denso'}
-                  </p>
-                </div>
-                
-                <button
-                  onClick={handleGenerateClick}
-                  className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-bold"
-                >
-                  Generar Nuevo Laberinto
-                </button>
+              {/* Tamaño */}
+              <div>
+                <label className="block text-sm font-medium text-indigo-300 mb-2">
+                  Tamaño: {gridSize}x{gridSize}
+                </label>
+                <input
+                  type="range"
+                  min={MIN_SIZE}
+                  max={MAX_SIZE}
+                  value={gridSize}
+                  onChange={(e) => setGridSize(parseInt(e.target.value))}
+                  className="w-full h-2 bg-indigo-900 rounded-lg appearance-none cursor-pointer"
+                />
+                <p className="text-xs text-indigo-300 mt-1">
+                  {gridSize <= 20 ? '🍬 Pequeño' : gridSize <= 40 ? '📏 Mediano' : '🏰 Gigante'}
+                </p>
               </div>
+              
+              {/* Densidad de paredes */}
+              <div>
+                <label className="block text-sm font-medium text-indigo-300 mb-2">
+                  Densidad de paredes: {wallDensity}%
+                </label>
+                <input
+                  type="range"
+                  min={MIN_DENSITY}
+                  max={MAX_DENSITY}
+                  value={wallDensity}
+                  onChange={(e) => setWallDensity(parseInt(e.target.value))}
+                  className="w-full h-2 bg-indigo-900 rounded-lg appearance-none cursor-pointer"
+                />
+                <p className="text-xs text-indigo-300 mt-1">
+                  {wallDensity <= 20 ? '🌿 Pocas paredes' : wallDensity <= 35 ? '🌲 Normal' : '🏢 Muy laberíntico'}
+                </p>
+              </div>
+              
+              {/* Porcentaje de locura */}
+              <div>
+                <label className="block text-sm font-medium text-indigo-300 mb-2">
+                  🎲 Locura: {crazyPercentage}% (probabilidad de movimiento aleatorio)
+                </label>
+                <input
+                  type="range"
+                  min={MIN_CRAZY}
+                  max={MAX_CRAZY}
+                  value={crazyPercentage}
+                  onChange={(e) => setCrazyPercentage(parseInt(e.target.value))}
+                  className="w-full h-2 bg-indigo-900 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+              
+              <button
+                onClick={() => handleSizeChange(gridSize)}
+                className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-bold"
+              >
+                Generar Laberinto
+              </button>
             </div>
           )}
           
@@ -587,26 +598,14 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
             </div>
           </div>
           
-          {/* Botones para cambiar configuración o reiniciar */}
+          {/* Botón para cambiar configuración durante el juego */}
           {!showSizeSelector && !isRunning && !foundCheese && (
-            <div className="mt-4 flex justify-center gap-4">
+            <div className="mt-4 text-center">
               <button
                 onClick={() => setShowSizeSelector(true)}
                 className="text-indigo-400 hover:text-indigo-300 underline"
               >
-                Cambiar configuración
-              </button>
-              <button
-                onClick={handleRetry}
-                className="text-yellow-400 hover:text-yellow-300 underline"
-              >
-                Recolocar (RETRY)
-              </button>
-              <button
-                onClick={handleRestart}
-                className="text-green-400 hover:text-green-300 underline"
-              >
-                Nuevo laberinto
+                Cambiar configuración del laberinto
               </button>
             </div>
           )}
@@ -629,20 +628,14 @@ const MazeSimulator: React.FC<MazeSimulatorProps> = ({ onClose }) => {
                 </button>
                 
                 <button
-                  onClick={() => {
-                    setShowSettings(false);
-                    handleRetry();
-                  }}
+                  onClick={handleRetry}
                   className="w-full px-4 py-4 bg-gradient-to-r from-yellow-600 to-amber-600 text-white rounded-xl hover:from-yellow-700 hover:to-amber-700 transition text-lg font-bold"
                 >
                   🔄 RETRY (Nuevas posiciones)
                 </button>
                 
                 <button
-                  onClick={() => {
-                    setShowSettings(false);
-                    handleRestart();
-                  }}
+                  onClick={handleRestart}
                   className="w-full px-4 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition text-lg font-bold"
                 >
                   🎲 RESTART (Nuevo laberinto)
